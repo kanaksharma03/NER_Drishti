@@ -1,0 +1,11 @@
+Baseline ML Model Evaluation Report
+===================================
+Model: XGBoost Classifier
+Features: ['elevation', 'slope', 'aspect_sin', 'aspect_cos', 'historical_rain_3d']
+Validation: Spatial GroupKFold (5 splits)
+
+Mean Accuracy:  0.791
+Mean Precision: 0.448
+Mean Recall:    0.390
+
+Note: Historical weather is simulated for the baseline due to lack of event-specific time-series data.

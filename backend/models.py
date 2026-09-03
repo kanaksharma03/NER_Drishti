@@ -1,0 +1,118 @@
+from sqlalchemy import Column, Integer, String, Float, MetaData, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy.orm import declarative_base
+from geoalchemy2 import Geometry
+
+metadata = MetaData()
+Base = declarative_base(metadata=metadata)
+
+class TerrainGrid(Base):
+    __tablename__ = "terrain_grid"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    # Using EPSG:4326 for simplicity, though a projected CRS is better for grids.
+    geom = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=False)
+    elevation = Column(Float)
+    slope = Column(Float)
+    aspect_sin = Column(Float)
+    aspect_cos = Column(Float)
+    plan_curvature = Column(Float)
+    profile_curvature = Column(Float)
+    twi = Column(Float)
+
+class Road(Base):
+    __tablename__ = "roads"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    geom = Column(Geometry(geometry_type='LINESTRING', srid=4326), nullable=False)
+    highway_class = Column(String)
+    name = Column(String)
+
+from sqlalchemy import DateTime, Boolean, ForeignKey
+
+class WeatherObservation(Base):
+    __tablename__ = "weather_observations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    lat = Column(Float)
+    lon = Column(Float)
+    timestamp = Column(DateTime(timezone=True), index=True)
+    rainfall_1h = Column(Float)
+    rainfall_24h_sum = Column(Float)
+    rainfall_72h_sum = Column(Float)
+    rainfall_24h_forecast = Column(Float)
+    soil_moisture = Column(Float)
+    is_stale = Column(Boolean, default=False)
+
+class RiskPrediction(Base):
+    __tablename__ = "risk_predictions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    lat = Column(Float)
+    lon = Column(Float)
+    timestamp = Column(DateTime(timezone=True), index=True)
+    probability = Column(Float)
+    severity_tier = Column(String)
+    model_version = Column(String)
+
+class RiskExplanation(Base):
+    __tablename__ = "risk_explanations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, ForeignKey("risk_predictions.id"))
+    feature_name = Column(String)
+    contribution_value = Column(Float)
+    is_positive_driver = Column(Boolean)
+
+class VerificationResult(Base):
+    __tablename__ = "verification_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, ForeignKey("risk_predictions.id"))
+    confidence_score = Column(Float)
+    supporting_signals = Column(JSON)
+    missing_signals = Column(JSON)
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    prediction_id = Column(Integer, ForeignKey("risk_predictions.id"))
+    priority = Column(String)
+    recommended_action = Column(String)
+    rule_version = Column(String)
+
+class IncidentCluster(Base):
+    __tablename__ = "incident_clusters"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    geom = Column(Geometry(geometry_type='POINT', srid=4326))
+    lat = Column(Float)
+    lon = Column(Float)
+    created_at = Column(DateTime)
+    status = Column(String, default="active")
+
+class CitizenReport(Base):
+    __tablename__ = "citizen_reports"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_id = Column(Integer, ForeignKey("incident_clusters.id"))
+    type = Column(String)
+    description = Column(String)
+    lat = Column(Float)
+    lon = Column(Float)
+    photo_path = Column(String)
+    is_spoofed = Column(Boolean)
+    submitted_at = Column(DateTime)
+
+class AlertLog(Base):
+    __tablename__ = "alert_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    audience_tier = Column(String)  # public, authority
+    severity_tier = Column(String)
+    channel = Column(String)        # in_app, sms, telegram
+    recipient = Column(String)
+    message_payload = Column(String)
+    status = Column(String)
+    sent_at = Column(DateTime)
+
