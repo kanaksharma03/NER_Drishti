@@ -1,8 +1,14 @@
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/ner_drishti")
+load_dotenv()
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Use SQLite for the software-only hackathon demo to avoid native PostgreSQL dependencies
+db_url = "sqlite+aiosqlite:///./nerdrishti.db"
+
+engine = create_async_engine(db_url, echo=False)
+AsyncSessionLocal = sessionmaker(
+    bind=engine, class_=AsyncSession, expire_on_commit=False
+)

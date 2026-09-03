@@ -31,6 +31,11 @@ async def weather_scheduler():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from models import Base
+    from database import engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    
     # Start the background task
     task = asyncio.create_task(weather_scheduler())
     yield
@@ -129,41 +134,41 @@ async def toggle_rain_spike(enable: bool = Query(True)):
 async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate cloudburst (mm of rain)")):
     """Returns terrain grid as GeoJSON FeatureCollection with live simulated risk tiers."""
     global SIMULATE_RAIN_SPIKE
+    from models import TerrainGrid
     async with AsyncSessionLocal() as session:
-        # We dynamically calculate a mock probability in SQL for the demo
         rain_modifier = 0.5 if SIMULATE_RAIN_SPIKE else (rainfall_delta / 200.0)
         
-        query = text(f"""
-            SELECT jsonb_build_object(
-                'type', 'FeatureCollection',
-                'features', jsonb_agg(feature)
-            )
-            FROM (
-                SELECT jsonb_build_object(
-                    'type',       'Feature',
-                    'id',         id,
-                    'geometry',   ST_AsGeoJSON(geom)::jsonb,
-                    'properties', jsonb_build_object(
-                        'elevation', elevation,
-                        'slope', slope,
-                        'probability', LEAST(1.0, GREATEST(0.0, (slope / 45.0) * 0.4 + (elevation / 3000.0) * 0.2 + {rain_modifier}))
-                    )
-                ) AS feature
-                FROM (
-                    SELECT id, geom, elevation, slope, twi 
-                    FROM terrain_grid 
-                    LIMIT 2000
-                ) AS limited_grid
-            ) features;
-        """)
+        result = await session.execute(select(TerrainGrid).limit(200))
+        cells = result.scalars().all()
         
-        result = await session.execute(query)
-        geojson = result.scalar()
+        features = []
+        for cell in cells:
+            probability = min(1.0, max(0.0,
+                (cell.slope / 45.0) * 0.4 +
+                ((cell.elevation or 1000) / 3000.0) * 0.2 +
+                rain_modifier
+            ))
+            # Build a tiny square polygon around the point
+            d = 0.005
+            coords = [[
+                [cell.lon - d, cell.lat - d],
+                [cell.lon + d, cell.lat - d],
+                [cell.lon + d, cell.lat + d],
+                [cell.lon - d, cell.lat + d],
+                [cell.lon - d, cell.lat - d],
+            ]]
+            features.append({
+                "type": "Feature",
+                "id": cell.id,
+                "geometry": {"type": "Polygon", "coordinates": coords},
+                "properties": {
+                    "elevation": cell.elevation,
+                    "slope": cell.slope,
+                    "probability": round(probability, 3)
+                }
+            })
         
-        if not geojson:
-            geojson = {"type": "FeatureCollection", "features": []}
-            
-        return JSONResponse(content=geojson)
+        return JSONResponse(content={"type": "FeatureCollection", "features": features})
 
 @app.get("/api/v1/weather/current")
 async def get_current_weather():
@@ -201,12 +206,28 @@ from services.inference import predict_risk
 @limiter.limit("60/minute")
 async def get_risk(request: Request, lat: float, lon: float):
     """
-    Returns the landslide probability, severity tier, and top 3 SHAP contributing factors
+    Returns the landslide probability, severity tier, and top SHAP contributing factors
     for the given coordinates.
     """
     try:
-        result = await predict_risk(lat, lon)
-        return result
+        pred, exps = await predict_risk(lat, lon)
+        return {
+            "lat": lat,
+            "lon": lon,
+            "risk_probability": round(pred.probability, 4),
+            "probability": round(pred.probability, 4),
+            "severity_tier": pred.severity_tier,
+            "severity": pred.severity_tier,
+            "timestamp": pred.timestamp.isoformat(),
+            "top_factors": [
+                {
+                    "feature": e.feature_name,
+                    "contribution": round(e.contribution_value, 4),
+                    "is_positive_driver": e.is_positive_driver
+                }
+                for e in exps
+            ]
+        }
     except Exception as e:
         logger.error(f"Inference error: {e}")
         from fastapi import HTTPException

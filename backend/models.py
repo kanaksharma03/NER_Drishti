@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, MetaData, DateTime, Boolean, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base
-from geoalchemy2 import Geometry
 
 metadata = MetaData()
 Base = declarative_base(metadata=metadata)
@@ -9,8 +8,8 @@ class TerrainGrid(Base):
     __tablename__ = "terrain_grid"
     
     id = Column(Integer, primary_key=True, index=True)
-    # Using EPSG:4326 for simplicity, though a projected CRS is better for grids.
-    geom = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=False)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
     elevation = Column(Float)
     slope = Column(Float)
     aspect_sin = Column(Float)
@@ -23,7 +22,8 @@ class Road(Base):
     __tablename__ = "roads"
     
     id = Column(Integer, primary_key=True, index=True)
-    geom = Column(Geometry(geometry_type='LINESTRING', srid=4326), nullable=False)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
     highway_class = Column(String)
     name = Column(String)
 
@@ -85,7 +85,6 @@ class IncidentCluster(Base):
     __tablename__ = "incident_clusters"
     
     id = Column(Integer, primary_key=True, index=True)
-    geom = Column(Geometry(geometry_type='POINT', srid=4326))
     lat = Column(Float)
     lon = Column(Float)
     created_at = Column(DateTime)
