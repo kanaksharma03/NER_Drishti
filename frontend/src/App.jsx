@@ -1,31 +1,52 @@
-import React, { useState } from 'react'
-import MapDashboard from './components/MapDashboard'
-import ReportForm from './components/ReportForm'
-import './App.css'
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import ProtectedRoute from './components/layout/ProtectedRoute';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Alerts from './pages/Alerts';
+import Reports from './pages/Reports';
+import Analytics from './pages/Analytics';
 
 function App() {
-  const [view, setView] = useState('dashboard'); // 'dashboard' or 'report'
-
   return (
-    <div className="App">
-      {view === 'dashboard' ? (
-        <MapDashboard />
-      ) : (
-        <div className="form-container glass-panel">
-          <ReportForm />
-        </div>
-      )}
-      
-      <div className="mode-switcher glass-panel" style={{ padding: '0.5rem' }}>
-        <button 
-          className="btn-primary" 
-          onClick={() => setView(view === 'dashboard' ? 'report' : 'dashboard')}
-        >
-          Switch to {view === 'dashboard' ? 'Citizen Reporter' : 'Authority Dashboard'}
-        </button>
-      </div>
-    </div>
-  )
+    <AuthProvider>
+      <ToastProvider>
+        <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/alerts" element={
+            <ProtectedRoute>
+              <Alerts />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/reports" element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/analytics" element={
+            <ProtectedRoute>
+              <Analytics />
+            </ProtectedRoute>
+          } />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+      </ToastProvider>
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;

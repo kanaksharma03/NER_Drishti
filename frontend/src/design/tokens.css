@@ -1,0 +1,75 @@
+:root {
+  /* Color - Backgrounds & Surfaces */
+  --bg-base: #12181C;
+  --bg-surface: #1B2329;
+  --bg-surface-raised: #232C33;
+  
+  /* Color - Borders & UI Chrome */
+  --border-hairline: #2E383F;
+  --accent-ui: #5FA8D3;
+  
+  /* Color - Text */
+  --text-primary: #E8EDEE;
+  --text-secondary: #8FA0A8;
+  
+  /* Color - Risk Gradient (For specific risk usage only) */
+  --risk-low: #4A7C6F;
+  --risk-moderate: #C9A24B;
+  --risk-high: #D9732E;
+  --risk-critical: #B23A3A;
+
+  /* Typography */
+  --font-display: 'Archivo', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  margin-top: 0;
+}
+
+.mono-data {
+  font-family: var(--font-mono);
+}
+
+/* Base shell layout helpers */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.map-area {
+  flex: 1;
+  background-color: var(--bg-base);
+  position: relative;
+}
+
+.right-panel {
+  width: 35%;
+  min-width: 300px;
+  max-width: 450px;
+  background-color: var(--bg-surface);
+  border-left: 1px solid var(--border-hairline);
+  padding: 1rem;
+  overflow-y: auto;
+}

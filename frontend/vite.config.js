@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173
   },
   optimizeDeps: {
-    include: ['maplibre-gl'],
+    exclude: ['maplibre-gl'],
   },
   resolve: {
     alias: {},
