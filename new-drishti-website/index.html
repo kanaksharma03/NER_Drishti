@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NER-DRISHTI | Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="mobile-fix.css" />
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"><span class="brand-mark">N</span><span>NER-<b>DRISHTI</b><small>REGIONAL WATCH / NE INDIA</small></span></a>
+      <nav>
+        <p class="nav-group">Operations</p>
+        <a class="active" href="#dashboard" data-view="dashboard"><i>▦</i> Command Center</a>
+        <a href="#dashboard" data-view="dashboard"><i>🗺</i> Risk Map</a>
+        <a href="#alerts" data-view="alerts"><i>◉</i> Early Warnings</a>
+        <a href="#events" data-view="events"><i>◷</i> Landslide Events</a>
+        
+        <p class="nav-group">Signals</p>
+        <a href="#dashboard" data-view="dashboard"><i>⛈</i> Weather & Terrain</a>
+        <a href="#dashboard" data-view="dashboard"><i>🏗</i> Infrastructure</a>
+        <a href="#reports" data-view="reports"><i>⌁</i> Field Reports</a>
+        
+        <p class="nav-group">Intelligence</p>
+        <a href="#analytics" data-view="analytics"><i>◔</i> Analytics</a>
+        <a href="#dashboard" data-view="dashboard"><i>🧠</i> AI Insights</a>
+        <a href="#simulation" data-view="simulation"><i>✦</i> What-if Simulation</a>
+        <a href="#safe-routes" data-view="safe-routes"><i>⛖</i> Safe Routes</a>
+        <a href="#data-sources" data-view="data-sources"><i>🗃</i> Data Sources</a>
+      </nav>
+      <div class="side-bottom">
+        <div class="user-dot">AP</div><div><b>Arun Priya</b><small>Operator / Admin</small></div><button title="Settings">⚙</button>
+      </div>
+    </aside>
+
+    <main>
+      <header>
+        <div><p class="eyebrow"><span class="live-dot"></span> LIVE REGIONAL PICTURE</p><h1 id="page-title">Command Center</h1><p class="subhead">Monitor landslide risk, rainfall, terrain and response signals across North Eastern India.</p></div>
+        <div class="header-actions">
+          <div id="system-status" class="system-status loading">SYSTEM: <span>CONNECTING...</span></div>
+          <button class="icon-btn" id="notify">♧</button>
+          <button class="profile">AP</button>
+        </div>
+      </header>
+
+      <section class="dashboard-view view active" id="dashboard">
+        <div class="kpis">
+          <article class="kpi"><div class="kpi-top"><span>ACTIVE RISK ZONES</span></div><strong id="kpi-active-zones">...</strong><p>Identified by Risk Model</p></article>
+          <article class="kpi"><div class="kpi-top"><span>CRITICAL SITES</span></div><strong id="kpi-critical-sites">...</strong><p><b id="kpi-critical-action">... require</b> urgent action</p></article>
+          <article class="kpi"><div class="kpi-top"><span>RAIN IN LAST 24H</span></div><strong id="kpi-rain">... <small>mm</small></strong><p>Latest IMD Observation</p></article>
+          <article class="kpi"><div class="kpi-top"><span>OPEN REPORTS</span></div><strong id="kpi-open-reports">...</strong><p>Active field reports</p></article>
+        </div>
+        <div class="command-grid">
+          <section class="map-card panel">
+            <div class="panel-head"><div><p class="eyebrow">REGIONAL RISK FIELD</p><h2>Risk Intelligence Map</h2></div><div class="map-controls"><button id="map-reset" title="Reset View">⌕</button></div></div>
+            <div id="map" class="map-stage" style="width: 100%; height: 100%; overflow: hidden; background: #e2e8f0; position: relative;">
+              <div class="map-legend" style="position: absolute; bottom: 20px; right: 20px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); font-size: 11px; z-index: 10; border: 1px solid #e2e8f0;">
+                <div style="font-weight: 600; margin-bottom: 6px; color: #475569;">RISK LEVEL</div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;"><span style="width:12px; height:12px; background:#ef4444; border-radius:2px; opacity:0.8;"></span> CRITICAL</div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;"><span style="width:12px; height:12px; background:#f97316; border-radius:2px; opacity:0.8;"></span> HIGH</div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;"><span style="width:12px; height:12px; background:#f59e0b; border-radius:2px; opacity:0.8;"></span> MODERATE</div>
+                <div style="display: flex; align-items: center; gap: 8px;"><span style="width:12px; height:12px; background:#22c55e; border-radius:2px; opacity:0.8;"></span> LOW</div>
+              </div>
+              <div class="map-layers-control" style="position: absolute; top: 20px; left: 20px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); font-size: 12px; z-index: 10; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="layer-toggle-risk" checked> Risk Grid</label>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="layer-toggle-safe-routes" checked> Safe Routes</label>
+              </div>
+            </div>
+          </section>
+          <aside class="risk-drawer panel" id="detail-panel">
+            <div class="drawer-title"><div><p class="eyebrow">SELECTED LOCATION</p><h3 id="site-name">Select a zone</h3><p class="coordinates">Coordinates unavailable</p></div><button class="close-drawer">×</button></div>
+            <div class="risk-score"><div class="gauge"><span id="risk-probability">--%</span></div><div><p>LANDSLIDE PROBABILITY</p><h2 id="risk-level">--</h2><span class="priority">RISK TIER</span></div></div>
+            <div class="shap"><div class="mini-head"><h4>Why is it risky?</h4><span>TreeSHAP AI Insights</span></div>
+              <div id="shap-factors">
+                <div class="empty-state">Select a risk zone on the map to view contributing factors.</div>
+              </div>
+            </div>
+            <div class="recommend"><span>✦</span><p><b>Model Note</b><br/>Factors are derived from live inference on the XGBoost model.</p></div>
+          </aside>
+        </div>
+        <div class="bottom-grid">
+          <section class="weather panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">WEATHER & TERRAIN</p><h2>Current Weather</h2></div>
+              <span id="weather-timestamp" style="font-size:0.75rem; color:#64748b;"></span>
+            </div>
+            <div class="weather-content" id="weather-container" style="display:flex; flex-direction:column; gap:16px;">
+              <div class="loading-state">Connecting to weather feed...</div>
+            </div>
+          </section>
+          <section class="incidents panel">
+            <div class="panel-head">
+              <div><p class="eyebrow">INFRASTRUCTURE WATCH</p><h2>Recent Incidents</h2></div>
+              <button class="link-btn" data-go="reports">View reports →</button>
+            </div>
+            <div id="incidents-container" style="display:flex; flex-direction:column; gap:12px; padding: 0 20px 20px;">
+              <div class="loading-state">Loading incidents...</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view simple-view" id="alerts">
+        <div class="section-title">
+          <div><p class="eyebrow">WARNING QUEUE</p><h2>Early Warnings</h2></div>
+          <select class="outline"><option>All districts</option></select>
+        </div>
+        <div class="alert-list" id="alert-container">
+          <div class="loading-state">Fetching active warnings...</div>
+        </div>
+      </section>
+
+      <section class="view simple-view" id="events">
+        <div class="section-title">
+          <div><p class="eyebrow">EVENT LOG</p><h2>Historical Landslide Events</h2></div>
+        </div>
+        <div class="panel" style="padding: 24px;">
+          <p class="subhead" style="margin-bottom: 20px;">Review past landslide events and their triggering conditions. Use the Analytics Replay to visualize these events on the risk map.</p>
+          <button class="primary" data-go="analytics">Go to Analytics Replay <span>→</span></button>
+        </div>
+      </section>
+
+      <section class="view simple-view" id="reports">
+        <div class="section-title"><div><p class="eyebrow">FIELD REPORTING</p><h2>Submit an incident report</h2></div><span class="secure" id="gps-status">● Locating...</span></div>
+        <form class="report-form panel" id="report-form">
+          <div class="upload-zone"><span>⌁</span><b>Drop a photo here</b><small>or tap to capture from your device</small><input type="file" name="photo" accept="image/*" required /></div>
+          <label>Incident type<select name="type" required><option value="">Select type</option><option>Landslide</option><option>Rockfall</option><option>Road blockage</option><option>Crack</option></select></label>
+          <label>Coordinates (Lat, Lon)<div style="display:flex; gap:8px;"><input type="number" step="any" name="lat" id="form-lat" placeholder="Latitude" required readonly /><input type="number" step="any" name="lon" id="form-lon" placeholder="Longitude" required readonly /></div></label>
+          <label class="full">What did you observe?<textarea name="description" placeholder="Add useful detail for the response team..." required></textarea></label>
+          <button class="primary" type="submit" id="submit-btn">Submit secure report <span>→</span></button>
+          <div id="submit-error" class="error-state" style="display:none; margin-top:12px;"></div>
+        </form>
+        <div class="toast" id="report-toast">Report queued. GPS and timestamp have been saved.</div>
+      </section>
+
+      <section class="view simple-view" id="analytics"><div class="section-title"><div><p class="eyebrow">INTELLIGENCE</p><h2>Risk & rainfall analytics</h2></div><button class="outline">Last 30 days ▾</button></div><div class="analytics-grid">
+        <article class="chart-card panel">
+          <h3>Historical Event Replay</h3>
+          <div id="replay-container" style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+            <div class="loading-state">Loading historical data...</div>
+          </div>
+        </article>
+      <article class="chart-card panel">
+        <h3>Infrastructure Monitoring</h3>
+        <div id="infra-container" style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+          <div class="loading-state">Loading infrastructure data...</div>
+        </div>
+      </article></div></section>
+
+      <section class="view simple-view" id="simulation"><div class="simulation-head"><div><p class="eyebrow"><span class="sim-badge" style="background:#e2e8f0; color:#475569; padding:4px 8px; border-radius:4px; font-weight:700; margin-right:8px;">SIMULATION</span> ADMIN-ONLY DEMO</p><h2>What if the rain intensifies?</h2><p>Explore modeled impact without changing live risk data.</p></div></div><div class="simulator panel"><div class="sim-readout"><span>ADDITIONAL RAINFALL</span><strong id="rain-value">+50 <small>mm</small></strong><p>over the next 24 hours</p></div><input type="range" min="0" max="150" value="50" id="rain-slider" /><div class="sim-scale"><span>0 mm</span><span>75 mm</span><span>150 mm</span></div><div class="sim-result"><span>UPDATE MODEL</span><button class="primary" id="run-sim">Run simulation <span>→</span></button></div></div></section>
+
+      <section class="view simple-view" id="safe-routes">
+        <div class="section-title">
+          <div><p class="eyebrow">INTELLIGENCE</p><h2>Safe Routes</h2></div>
+        </div>
+        <div class="panel" style="padding: 24px;">
+          <p class="subhead" style="margin-bottom: 20px;">Calculating safe evacuation corridors avoiding high-risk landslide zones.</p>
+          <div id="safe-route-status">
+            <div class="loading-state">Fetching safe route data...</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view simple-view" id="data-sources">
+        <div class="section-title">
+          <div><p class="eyebrow">INTELLIGENCE</p><h2>Data Sources</h2></div>
+        </div>
+        <div class="panel" style="padding: 24px;">
+          <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <th style="padding: 12px 0;">Source</th>
+                <th style="padding: 12px 0;">Data Type</th>
+                <th style="padding: 12px 0;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 12px 0;">Open-Meteo</td>
+                <td style="padding: 12px 0;">Weather / Rainfall</td>
+                <td style="padding: 12px 0;"><span style="color: #22c55e; font-weight: 600;">LIVE</span></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 12px 0;">IMD</td>
+                <td style="padding: 12px 0;">Rainfall / Weather</td>
+                <td style="padding: 12px 0;"><span style="color: #64748b; font-weight: 600;">PLANNED / EXTERNAL</span></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 12px 0;">Satellite DEM</td>
+                <td style="padding: 12px 0;">Elevation / Slope</td>
+                <td style="padding: 12px 0;"><span style="color: #64748b; font-weight: 600;">STATIC</span></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 12px 0;">Historical Records</td>
+                <td style="padding: 12px 0;">Past Landslides</td>
+                <td style="padding: 12px 0;"><span style="color: #64748b; font-weight: 600;">HISTORICAL</span></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0;">NER-DRISHTI ML</td>
+                <td style="padding: 12px 0;">Risk Inference</td>
+                <td style="padding: 12px 0;"><span style="color: #0f766e; font-weight: 600;">MODEL DERIVED</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+    <div class="modal-backdrop" id="modal"><div class="modal"><button class="close-modal">×</button><div class="modal-icon">✓</div><h2>Alert acknowledged</h2><p>The P1 response has been logged and the field team has been notified.</p><button class="primary close-action">Done</button></div></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

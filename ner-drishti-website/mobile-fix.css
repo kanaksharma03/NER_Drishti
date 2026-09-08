@@ -1,0 +1,4 @@
+@media (max-width: 760px) {
+  nav a { font-size: 0; }
+  nav a i { font-size: 19px; }
+}
