@@ -83,7 +83,8 @@ async def submit_report(
     description: str = Form(...),
     lat: float = Form(...),
     lon: float = Form(...),
-    photo: UploadFile = File(...)
+    photo: UploadFile = File(...),
+    region_id: int | None = Form(None)
 ):
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
@@ -101,7 +102,8 @@ async def submit_report(
             description=description,
             lat=lat,
             lon=lon,
-            photo_path=file_path
+            photo_path=file_path,
+            region_id=region_id
         )
         
     return {
@@ -109,6 +111,24 @@ async def submit_report(
         "is_spoofed": report.is_spoofed,
         "cluster_id": report.cluster_id
     }
+
+@app.get("/api/v1/regions", tags=["Regions"], summary="List monitored regions/districts")
+async def get_regions():
+    from models import Region
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Region).where(Region.is_active == True))
+        regions = result.scalars().all()
+        return [
+            {
+                "id": r.id,
+                "state": r.state,
+                "district": r.district,
+                "corridor_name": r.corridor_name,
+                "center_lat": r.center_lat,
+                "center_lon": r.center_lon,
+            }
+            for r in regions
+        ]
 
 @app.get("/health")
 async def health_check():
@@ -131,14 +151,20 @@ async def toggle_rain_spike(enable: bool = Query(True)):
     return {"status": "ok", "simulate_rain_spike": SIMULATE_RAIN_SPIKE}
 
 @app.get("/api/v1/risk/grid", tags=["Risk Analysis"], summary="Get Hazard Grid GeoJSON")
-async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate cloudburst (mm of rain)")):
+async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate cloudburst (mm of rain)"), region_id: int | None = Query(None)):
     """Returns terrain grid as GeoJSON FeatureCollection with live simulated risk tiers."""
     global SIMULATE_RAIN_SPIKE
     from models import TerrainGrid
     async with AsyncSessionLocal() as session:
         rain_modifier = 0.5 if SIMULATE_RAIN_SPIKE else (rainfall_delta / 200.0)
         
-        result = await session.execute(select(TerrainGrid).limit(200))
+        stmt = select(TerrainGrid)
+        if region_id is not None:
+            stmt = stmt.where(TerrainGrid.region_id == region_id)
+        else:
+            stmt = stmt.limit(200)
+            
+        result = await session.execute(stmt)
         cells = result.scalars().all()
         
         features = []
@@ -171,16 +197,25 @@ async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate
         return JSONResponse(content={"type": "FeatureCollection", "features": features})
 
 @app.get("/api/v1/weather/current")
-async def get_current_weather():
-    """Returns the latest weather observations for the 3 representative points."""
+async def get_current_weather(region_id: int | None = Query(None)):
+    """Returns the latest weather observations."""
     async with AsyncSessionLocal() as session:
-        # We need the most recent record per location.
-        # SQLite / Postgres window functions or simple distinct/group by.
-        # For simplicity, we just fetch the last 3 records ordered by timestamp desc
-        query = select(WeatherObservation).order_by(desc(WeatherObservation.timestamp)).limit(3)
-        result = await session.execute(query)
+        stmt = select(WeatherObservation).order_by(desc(WeatherObservation.timestamp))
+        if region_id is not None:
+            stmt = stmt.where(WeatherObservation.region_id == region_id)
+            
+        stmt = stmt.limit(3 if region_id is None else 20)
+        result = await session.execute(stmt)
         obs_list = result.scalars().all()
         
+        seen = set()
+        latest_obs = []
+        for obs in obs_list:
+            loc = (obs.lat, obs.lon)
+            if loc not in seen:
+                seen.add(loc)
+                latest_obs.append(obs)
+                
         return [
             {
                 "lat": obs.lat,
@@ -191,7 +226,7 @@ async def get_current_weather():
                 "soil_moisture": obs.soil_moisture,
                 "is_stale": obs.is_stale
             }
-            for obs in obs_list
+            for obs in latest_obs
         ]
 
 @app.post("/api/v1/weather/force_fetch")
@@ -234,10 +269,12 @@ async def get_risk(request: Request, lat: float, lon: float):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/reports", tags=["Citizen Reporting"], summary="List Active Citizen Reports")
-async def get_active_reports():
+async def get_active_reports(region_id: int | None = Query(None)):
     from models import IncidentCluster
     async with AsyncSessionLocal() as session:
         query = select(IncidentCluster).where(IncidentCluster.status == "active")
+        if region_id is not None:
+            query = query.where(IncidentCluster.region_id == region_id)
         result = await session.execute(query)
         clusters = result.scalars().all()
         return [{"id": c.id, "lat": c.lat, "lon": c.lon, "created_at": c.created_at} for c in clusters]

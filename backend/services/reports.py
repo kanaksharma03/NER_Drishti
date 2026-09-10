@@ -16,7 +16,8 @@ async def process_report(
     description: str,
     lat: float,
     lon: float,
-    photo_path: str
+    photo_path: str,
+    region_id: int = None
 ) -> CitizenReport:
     """
     1. Checks for spoofing.
@@ -28,6 +29,7 @@ async def process_report(
     if is_spoofed:
         # We still save it for auditing but don't cluster it with genuine reports
         report = CitizenReport(
+            region_id=region_id,
             type=report_type,
             description=description,
             lat=lat,
@@ -63,6 +65,7 @@ async def process_report(
 
     if not cluster:
         cluster = IncidentCluster(
+            region_id=region_id,
             geom=WKTElement(f"POINT({lon} {lat})", srid=4326),
             lat=lat,
             lon=lon,
@@ -73,6 +76,7 @@ async def process_report(
         await session.flush() # flush to get cluster.id
 
     report = CitizenReport(
+        region_id=region_id,
         cluster_id=cluster.id,
         type=report_type,
         description=description,

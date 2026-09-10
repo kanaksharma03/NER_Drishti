@@ -11,11 +11,18 @@ from database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
-# 3 Representative points along the NH-13 Bhalukpong–Tawang corridor
+# TODO: look up region_id dynamically once Region table is seeded
 POINTS = [
-    {"lat": 27.02, "lon": 92.65, "name": "Bhalukpong (Start)"},
-    {"lat": 27.32, "lon": 92.53, "name": "Bomdila (Middle)"},
-    {"lat": 27.58, "lon": 91.86, "name": "Tawang (End)"}
+    # Arunachal Pradesh — NH-13 (region_id=1)
+    {"lat": 27.02, "lon": 92.65, "name": "Bhalukpong (Start)", "region_id": 1},
+    {"lat": 27.32, "lon": 92.53, "name": "Bomdila (Middle)", "region_id": 1},
+    {"lat": 27.58, "lon": 91.86, "name": "Tawang (End)", "region_id": 1},
+    # Sikkim — NH-10 (region_id=2)
+    {"lat": 27.33, "lon": 88.61, "name": "Gangtok", "region_id": 2},
+    {"lat": 27.39, "lon": 88.62, "name": "Nathula Approach", "region_id": 2},
+    # Meghalaya — NH-6 (region_id=3)
+    {"lat": 25.57, "lon": 91.88, "name": "Shillong", "region_id": 3},
+    {"lat": 25.30, "lon": 91.73, "name": "Cherrapunji", "region_id": 3},
 ]
 
 async def fetch_weather_for_point(client: httpx.AsyncClient, lat: float, lon: float, force_fail=False):
@@ -41,12 +48,13 @@ async def fetch_weather_for_point(client: httpx.AsyncClient, lat: float, lon: fl
         logger.error(f"Failed to fetch weather for {lat},{lon}: {e}")
         return None
 
-def process_weather_data(data, lat, lon):
+def process_weather_data(data, lat, lon, region_id=None):
     now = datetime.now(timezone.utc)
     
     if not data or "hourly" not in data:
         # Create a stale record with fallback data to survive demo
         return WeatherObservation(
+            region_id=region_id,
             lat=lat,
             lon=lon,
             timestamp=now,
@@ -89,6 +97,7 @@ def process_weather_data(data, lat, lon):
     current_soil_moisture = current_soil_moisture or 0.0
     
     return WeatherObservation(
+        region_id=region_id,
         lat=lat,
         lon=lon,
         timestamp=now,
@@ -106,7 +115,7 @@ async def ingest_weather_data(force_fail=False):
         observations = []
         for pt in POINTS:
             data = await fetch_weather_for_point(client, pt["lat"], pt["lon"], force_fail=force_fail)
-            obs = process_weather_data(data, pt["lat"], pt["lon"])
+            obs = process_weather_data(data, pt["lat"], pt["lon"], pt.get("region_id"))
             observations.append(obs)
             
         async with AsyncSessionLocal() as session:

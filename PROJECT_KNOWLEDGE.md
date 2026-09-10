@@ -11,12 +11,12 @@ The platform aims to answer four critical questions for disaster management auth
 3. **Why is it happening?** (Providing interpretable AI explanations)
 4. **What should we do?** (Recommending actionable steps based on priority)
 
-Currently, the pilot corridor focuses on **NH-13 (Bomdila to Bhalukpong area)** in Arunachal Pradesh.
+Currently, the system supports multiple pilot regions including **Arunachal Pradesh (NH-13)**, **Sikkim (NH-10)**, and **Meghalaya (NH-6)**, with architecture in place to scale pan-NER.
 
 ## 2. Minimum Viable Product (MVP) Scope
 Our MVP has been scoped to prioritize immediate value and functionality without relying on complex, unscalable hardware:
 - **Software-Only Approach**: Unlike traditional systems that rely on expensive, easily-damaged physical IoT sensors (tilt-meters, boreholes), our MVP relies purely on data integration. Soil saturation and weather data are dynamically sourced from **ERA5-Land / Open-Meteo**.
-- **Single Pilot Corridor**: The MVP is tightly scoped to a ~50km highway corridor to prove efficacy before scaling pan-NER or pan-India.
+- **Multi-Region Scalability**: The MVP supports switching between multiple states and districts dynamically, proving efficacy across varied terrains before scaling pan-India.
 - **Rule-Based to ML Pipeline**: We verify learned predictions using rule-based heuristics before promoting them to authorities, ensuring trust and explainability.
 
 ## 3. Core Features & Capabilities
@@ -45,7 +45,45 @@ Most existing landslide warning systems rely heavily on expensive, hyper-localiz
 - **Phase 2 (Design Overhaul)**: Transitioned the UI from a generic SaaS look to a professional, dark-sidebar "Command Center" aesthetic suitable for government and emergency operations.
 - **Phase 3 (GIS & Data Integration)**: Connected the frontend directly to the FastAPI endpoints (`/api/v1/risk/grid`, `/api/v1/weather/current`, `/api/v1/reports`). 
 - **Phase 4 (Functional Audit)**: Removed all frontend mock data. Ensured all KPI counts, map colors, drawer data, and infrastructure logs strictly mirror the actual Python backend logic. Implemented robust Loading, Empty, and Error states across all panels.
+- **Phase 5 (Multi-Region Support)**: Re-architected the backend and database to support dynamic region switching (Arunachal Pradesh, Sikkim, Meghalaya) and seeded the database with region-specific terrain and weather data.
 
-## 7. Next Steps & Technical Debt
-- **Database Seeding**: While the frontend is fully capable of rendering live data, the backend SQLite database requires comprehensive seeding (via `seed.py`) with real `TerrainGrid` and `WeatherObservation` rows to maximize the demo's realism.
+## 7. System Architecture
+The NER-DRISHTI system follows a decoupled, API-driven client-server architecture:
+- **Frontend (Client)**: Built with React, Vite, and MapLibre GL. It acts as the "Command Center" dashboard for authorities and the PWA for citizen reporting. It is entirely stateless and relies on the backend for all data and ML insights.
+- **Backend (Server)**: Built with Python and FastAPI. It exposes RESTful API endpoints (`/api/v1/*`) to serve risk predictions, process citizen reports, and distribute alerts. It uses a SQLite database (via SQLAlchemy and aiosqlite) for MVP storage.
+- **External Integrations**: The backend continuously polls the Open-Meteo API to ingest live weather data (precipitation, soil moisture) into the database, keeping the ML predictions fresh.
+
+## 8. Frontend and Backend Workflow System
+
+```text
+[ BACKGROUND PROCESS ]
+External Weather API ──(fetches every 1 min)──> Backend ──(calculates 72h rain sums)──> Database
+
+[ CITIZEN REPORT FLOW ]
+Mobile App User ──(uploads photo + location)──> Backend ──(checks EXIF for spoofing)──> Groups into Clusters ──> Database
+
+[ MAIN PREDICTION FLOW ]
+Frontend Map ──(sends latitude/longitude & region_id)──> Backend API
+                                                              │
+                                                              ▼
+                                    1. Fetch Terrain & Weather from Database for that location
+                                                              │
+                                                              ▼
+                                    2. Heuristic ML Model calculates probability (0-100%)
+                                                              │
+                                                              ▼
+                                    3. SHAP Engine determines the "Why" (top contributing factors)
+                                                              │
+                                                              ▼
+                                    4. Verification Engine cross-checks with Citizen Reports & Soil Moisture
+                                                              │
+                                                              ▼
+                                    5. If Critical + Confident ──> Trigger Alerts
+                                                              │
+                                                              ▼
+Frontend Dashboard <──(Returns JSON with Probability, Severity, and SHAP explanations)── Backend API
+```
+
+## 9. Next Steps & Technical Debt
 - **Crowdsourcing Validation Loop**: Further refine the Bayesian-style confidence uplift, where a verified citizen report automatically nudges the nearest XGBoost prediction's confidence score higher.
+- **Scale Database**: Migrate from SQLite to PostgreSQL with PostGIS extensions to handle larger, pan-India datasets natively and perform complex spatial queries more efficiently.
