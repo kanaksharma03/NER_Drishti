@@ -80,8 +80,8 @@ export async function fetchHistoryReplay() {
   return fetchAPI('/api/v1/history/replay');
 }
 
-export async function fetchSafeRoutes() {
-  return fetchAPI('/api/v1/routes/safe');
+export async function fetchSafeRoutes(regionId = 1) {
+  return fetchAPI(`/api/v1/routes/safe?region_id=${regionId}`);
 }
 
 export async function toggleRainSimulation(enable) {

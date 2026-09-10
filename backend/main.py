@@ -310,24 +310,95 @@ async def get_alerts():
             for a in alerts
         ]
 
+async def get_current_grid_cells(region_id: int):
+    from models import TerrainGrid
+    async with AsyncSessionLocal() as session:
+        stmt = select(TerrainGrid)
+        if region_id is not None:
+            stmt = stmt.where(TerrainGrid.region_id == region_id)
+        result = await session.execute(stmt)
+        return result.scalars().all()
+
+def route_intersects_critical(route_coords, grid_cells):
+    """
+    Simple prototype check: for each coordinate point on the route, 
+    check whether it falls inside any grid cell currently classified Critical (probability >= 0.80).
+    This is a rule-based check using bounding-boxes, not a road-network pathfinding engine.
+    """
+    global SIMULATE_RAIN_SPIKE
+    rain_modifier = 0.5 if SIMULATE_RAIN_SPIKE else 0.0
+    d = 0.005
+    for cell in grid_cells:
+        prob = min(1.0, max(0.0,
+            (cell.slope / 45.0) * 0.4 +
+            ((cell.elevation or 1000) / 3000.0) * 0.2 +
+            rain_modifier
+        ))
+        if prob >= 0.8:
+            cell_min_lon = cell.lon - d
+            cell_max_lon = cell.lon + d
+            cell_min_lat = cell.lat - d
+            cell_max_lat = cell.lat + d
+            for lon, lat in route_coords:
+                if (cell_min_lon <= lon <= cell_max_lon) and (cell_min_lat <= lat <= cell_max_lat):
+                    return True
+    return False
+
 @app.get("/api/v1/routes/safe", tags=["Routing"], summary="Plan Safe Evacuation Route")
-async def get_safe_route():
-    """Returns a mock GeoJSON LineString dodging high-risk zones for the demo."""
+async def get_safe_route(region_id: int = Query(...)):
+    """
+    Returns a primary route and, if the primary route crosses any current
+    Critical-risk grid cell, flags it blocked and returns an alternate route
+    instead. This is a rule-based prototype check against the live risk grid,
+    not a full road-network pathfinding engine.
+    """
+    ROUTES = {
+        1: {  # Arunachal Pradesh — NH-13
+            "primary": [[92.4, 27.15], [92.45, 27.25], [92.55, 27.28], [92.6, 27.2]],
+            "alternate": [[92.4, 27.15], [92.38, 27.20], [92.42, 27.30], [92.6, 27.2]],
+        },
+        2: {  # Sikkim — NH-10, placeholder coords near Gangtok corridor center
+            "primary": [[88.61, 27.33], [88.63, 27.36], [88.62, 27.39]],
+            "alternate": [[88.61, 27.33], [88.58, 27.35], [88.60, 27.39]],
+        },
+        3: {  # Meghalaya — NH-6, placeholder coords near Shillong-Cherrapunji corridor
+            "primary": [[91.88, 25.57], [91.82, 25.45], [91.70, 25.35]],
+            "alternate": [[91.88, 25.57], [91.95, 25.48], [91.78, 25.35]],
+        },
+    }
+    # NOTE: Sikkim and Meghalaya coordinates above are placeholders and should be
+    # replaced with real corridor geometry when available.
+
+    route_set = ROUTES.get(region_id, ROUTES[1])
+
+    grid_cells = await get_current_grid_cells(region_id)
+
+    is_primary_blocked = route_intersects_critical(route_set["primary"], grid_cells)
+    active_route = route_set["alternate"] if is_primary_blocked else route_set["primary"]
+    route_status = "BLOCKED — ALTERNATE ROUTE ACTIVE" if is_primary_blocked else "PRIMARY ROUTE CLEAR"
+
     return {
-        "type": "FeatureCollection",
-        "features": [{
+        "status": route_status,
+        "is_primary_blocked": is_primary_blocked,
+        "primary_route": {
             "type": "Feature",
-            "properties": {"name": "Safe Evacuation Corridor", "color": "#22c55e"},
-            "geometry": {
-                "type": "LineString",
-                "coordinates": [
-                    [92.4, 27.15],
-                    [92.45, 27.25], 
-                    [92.55, 27.28],
-                    [92.6, 27.2]
-                ]
-            }
-        }]
+            "properties": {
+                "name": "Primary Route", 
+                "role": "primary", 
+                "color": "#ef4444" if is_primary_blocked else "#22c55e"
+            },
+            "geometry": {"type": "LineString", "coordinates": route_set["primary"]}
+        },
+        "alternate_route": {
+            "type": "Feature",
+            "properties": {
+                "name": "Alternate Route", 
+                "role": "alternate", 
+                "color": "#22c55e" if is_primary_blocked else "#94a3b8"
+            },
+            "geometry": {"type": "LineString", "coordinates": route_set["alternate"]}
+        },
+        "active_route": active_route
     }
 
 @app.get("/api/v1/history/replay", tags=["Simulation"], summary="Replay Historical Event")

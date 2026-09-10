@@ -72,7 +72,7 @@ export default function MapDashboard() {
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#22c55e',
+          'line-color': ['get', 'color'],
           'line-width': 4,
           'line-dasharray': [0, 2] // Dashed line
         }
@@ -167,9 +167,12 @@ export default function MapDashboard() {
       map.current.getSource('safe-route').setData({ type: 'FeatureCollection', features: [] });
       setRouteActive(false);
     } else {
-      const res = await fetch('http://localhost:8000/api/v1/routes/safe');
+      const res = await fetch('http://localhost:8000/api/v1/routes/safe?region_id=1');
       const data = await res.json();
-      map.current.getSource('safe-route').setData(data);
+      map.current.getSource('safe-route').setData({
+        type: 'FeatureCollection',
+        features: [data.primary_route, data.alternate_route]
+      });
       setRouteActive(true);
     }
   };
