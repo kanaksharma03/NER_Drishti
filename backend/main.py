@@ -73,7 +73,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         role = "public"
     
     access_token = create_access_token(data={"sub": form_data.username, "role": role})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "role": role.capitalize()}
 
 @app.post("/api/v1/reports/submit", tags=["Citizen Reporting"], summary="Submit an incident report")
 @limiter.limit("5/minute")
@@ -197,37 +197,24 @@ async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate
         return JSONResponse(content={"type": "FeatureCollection", "features": features})
 
 @app.get("/api/v1/weather/current")
-async def get_current_weather(region_id: int | None = Query(None)):
+async def get_current_weather(region_id: int = Query(...)):
     """Returns the latest weather observations."""
     async with AsyncSessionLocal() as session:
-        stmt = select(WeatherObservation).order_by(desc(WeatherObservation.timestamp))
-        if region_id is not None:
-            stmt = stmt.where(WeatherObservation.region_id == region_id)
-            
-        stmt = stmt.limit(3 if region_id is None else 20)
+        stmt = select(WeatherObservation).where(WeatherObservation.region_id == region_id).order_by(desc(WeatherObservation.timestamp)).limit(1)
         result = await session.execute(stmt)
-        obs_list = result.scalars().all()
+        obs = result.scalar_one_or_none()
         
-        seen = set()
-        latest_obs = []
-        for obs in obs_list:
-            loc = (obs.lat, obs.lon)
-            if loc not in seen:
-                seen.add(loc)
-                latest_obs.append(obs)
-                
-        return [
-            {
-                "lat": obs.lat,
-                "lon": obs.lon,
-                "timestamp": obs.timestamp,
-                "rainfall_1h": obs.rainfall_1h,
-                "rainfall_24h_sum": obs.rainfall_24h_sum,
-                "soil_moisture": obs.soil_moisture,
-                "is_stale": obs.is_stale
-            }
-            for obs in latest_obs
-        ]
+        if not obs:
+            return {}
+            
+        return {
+            "region_id": obs.region_id,
+            "rainfall_1h": obs.rainfall_1h,
+            "rainfall_24h": obs.rainfall_24h_sum,
+            "rainfall_72h": obs.rainfall_72h_sum,
+            "soil_moisture": obs.soil_moisture,
+            "updated_at": obs.timestamp.isoformat() if obs.timestamp else None
+        }
 
 @app.post("/api/v1/weather/force_fetch")
 async def force_weather_fetch(fail: bool = Query(False, description="Simulate failure to test staleness")):
@@ -270,14 +257,26 @@ async def get_risk(request: Request, lat: float, lon: float):
 
 @app.get("/api/v1/reports", tags=["Citizen Reporting"], summary="List Active Citizen Reports")
 async def get_active_reports(region_id: int | None = Query(None)):
-    from models import IncidentCluster
+    from models import CitizenReport, IncidentCluster
     async with AsyncSessionLocal() as session:
-        query = select(IncidentCluster).where(IncidentCluster.status == "active")
+        query = select(CitizenReport, IncidentCluster.status).join(IncidentCluster, CitizenReport.cluster_id == IncidentCluster.id).where(IncidentCluster.status == "active")
         if region_id is not None:
-            query = query.where(IncidentCluster.region_id == region_id)
+            query = query.where(CitizenReport.region_id == region_id)
         result = await session.execute(query)
-        clusters = result.scalars().all()
-        return [{"id": c.id, "lat": c.lat, "lon": c.lon, "created_at": c.created_at} for c in clusters]
+        rows = result.all()
+        return [
+            {
+                "id": str(r.CitizenReport.id),
+                "report_type": r.CitizenReport.type,
+                "description": r.CitizenReport.description,
+                "lat": r.CitizenReport.lat,
+                "lon": r.CitizenReport.lon,
+                "photo_url": r.CitizenReport.photo_path,
+                "status": r.status,
+                "created_at": r.CitizenReport.submitted_at.isoformat() if r.CitizenReport.submitted_at else None
+            }
+            for r in rows
+        ]
 
 @app.get("/api/v1/roads-impacted", tags=["Impact Analysis"], summary="Get Roads Impacted by High Risk")
 async def get_roads_impacted(role: str = Depends(require_authority)):
