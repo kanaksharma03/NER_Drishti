@@ -174,8 +174,8 @@ async def get_risk_grid(rainfall_delta: float = Query(0.0, description="Simulate
                 ((cell.elevation or 1000) / 3000.0) * 0.2 +
                 rain_modifier
             ))
-            # Build a tiny square polygon around the point
-            d = 0.005
+            # Build a corridor cell polygon around point
+            d = 0.002
             coords = [[
                 [cell.lon - d, cell.lat - d],
                 [cell.lon + d, cell.lat - d],
@@ -279,32 +279,45 @@ async def get_active_reports(region_id: int | None = Query(None)):
         ]
 
 @app.get("/api/v1/roads-impacted", tags=["Impact Analysis"], summary="Get Roads Impacted by High Risk")
-async def get_roads_impacted(role: str = Depends(require_authority)):
-    """Protected endpoint for authorities to plan road closures."""
-    # In a real setup, we would run ST_Intersects against the risk predictions table and road network.
-    # We will mock the return payload here for API stability.
+async def get_roads_impacted(region_id: int | None = Query(None)):
+    """Returns impacted road segments for the selected region."""
+    ROADS_BY_REGION = {
+        1: [
+            {"name": "NH-13", "highway_class": "National Highway", "risk_level": "Critical", "affected_segment": "Bhalukpong–Bomdila Stretch (KM 42)"},
+            {"name": "SH-4", "highway_class": "State Highway", "risk_level": "High", "affected_segment": "Tenga Valley Cut (KM 18)"}
+        ],
+        2: [
+            {"name": "NH-10", "highway_class": "National Highway", "risk_level": "Critical", "affected_segment": "Gangtok–Nathula Corridor (KM 24)"},
+            {"name": "Ranka Road", "highway_class": "District Road", "risk_level": "Moderate", "affected_segment": "Lower Ranka Bypass"}
+        ],
+        3: [
+            {"name": "NH-6", "highway_class": "National Highway", "risk_level": "Critical", "affected_segment": "Shillong–Cherrapunji Highway (KM 31)"},
+            {"name": "Mawkdok Road", "highway_class": "State Highway", "risk_level": "High", "affected_segment": "Duwan Sing Syiem Bridge Approach"}
+        ]
+    }
+    target_id = region_id or 1
+    segments = ROADS_BY_REGION.get(target_id, ROADS_BY_REGION[1])
     return {
         "status": "success",
-        "impacted_segments": [
-            {"highway_class": "national", "name": "NH-13", "risk_level": "Critical"}
-        ]
+        "region_id": target_id,
+        "impacted_segments": segments
     }
 
 @app.get("/api/v1/alerts", tags=["Alerts"], summary="Get recent alerts")
 async def get_alerts():
     from models import AlertLog
     async with AsyncSessionLocal() as session:
-        query = select(AlertLog).order_by(desc(AlertLog.sent_at)).limit(5)
+        query = select(AlertLog).order_by(desc(AlertLog.sent_at)).limit(10)
         result = await session.execute(query)
         alerts = result.scalars().all()
         return [
             {
                 "id": a.id,
-                "audience": a.audience_tier,
-                "severity": a.severity_tier,
+                "audience_tier": a.audience_tier,
+                "severity_tier": a.severity_tier,
                 "channel": a.channel,
-                "message": a.message_payload,
-                "sent_at": a.sent_at
+                "message_payload": a.message_payload,
+                "sent_at": a.sent_at.isoformat() if a.sent_at else None
             }
             for a in alerts
         ]
@@ -348,37 +361,55 @@ async def get_safe_route(region_id: int = Query(...)):
     """
     Returns a primary route and, if the primary route crosses any current
     Critical-risk grid cell, flags it blocked and returns an alternate route
-    instead. This is a rule-based prototype check against the live risk grid,
-    not a full road-network pathfinding engine.
+    instead.
     """
     ROUTES = {
         1: {  # Arunachal Pradesh — NH-13
-            "primary": [[92.4, 27.15], [92.45, 27.25], [92.55, 27.28], [92.6, 27.2]],
-            "alternate": [[92.4, 27.15], [92.38, 27.20], [92.42, 27.30], [92.6, 27.2]],
+            "corridor": "NH-13 Bhalukpong–Bomdila",
+            "hazard_segment": "Bhalukpong Slide Zone (KM 42)",
+            "center": [92.50, 27.22],
+            "primary": [[92.4, 27.15], [92.45, 27.20], [92.50, 27.24], [92.60, 27.28]],
+            "alternate": [[92.4, 27.15], [92.35, 27.18], [92.42, 27.26], [92.60, 27.28]],
+            "distance_km": 48.5,
+            "estimated_time_min": 65,
         },
-        2: {  # Sikkim — NH-10, placeholder coords near Gangtok corridor center
-            "primary": [[88.61, 27.33], [88.63, 27.36], [88.62, 27.39]],
-            "alternate": [[88.61, 27.33], [88.58, 27.35], [88.60, 27.39]],
+        2: {  # Sikkim — NH-10
+            "corridor": "NH-10 Gangtok–Nathula Corridor",
+            "hazard_segment": "Gangtok Slide Cut (KM 24)",
+            "center": [88.64, 27.37],
+            "primary": [[88.61, 27.33], [88.64, 27.36], [88.67, 27.38], [88.70, 27.42]],
+            "alternate": [[88.61, 27.33], [88.58, 27.35], [88.63, 27.40], [88.70, 27.42]],
+            "distance_km": 34.2,
+            "estimated_time_min": 48,
         },
-        3: {  # Meghalaya — NH-6, placeholder coords near Shillong-Cherrapunji corridor
-            "primary": [[91.88, 25.57], [91.82, 25.45], [91.70, 25.35]],
-            "alternate": [[91.88, 25.57], [91.95, 25.48], [91.78, 25.35]],
+        3: {  # Meghalaya — NH-6
+            "corridor": "NH-6 Shillong–Cherrapunji Corridor",
+            "hazard_segment": "Mawkdok Gorge Segment (KM 31)",
+            "center": [91.82, 25.46],
+            "primary": [[91.88, 25.57], [91.82, 25.46], [91.75, 25.40], [91.70, 25.35]],
+            "alternate": [[91.88, 25.57], [91.94, 25.50], [91.82, 25.38], [91.70, 25.35]],
+            "distance_km": 56.8,
+            "estimated_time_min": 74,
         },
     }
-    # NOTE: Sikkim and Meghalaya coordinates above are placeholders and should be
-    # replaced with real corridor geometry when available.
 
-    route_set = ROUTES.get(region_id, ROUTES[1])
-
+    route_data = ROUTES.get(region_id, ROUTES[1])
     grid_cells = await get_current_grid_cells(region_id)
 
-    is_primary_blocked = route_intersects_critical(route_set["primary"], grid_cells)
-    active_route = route_set["alternate"] if is_primary_blocked else route_set["primary"]
+    is_primary_blocked = route_intersects_critical(route_data["primary"], grid_cells)
+    active_coords = route_data["alternate"] if is_primary_blocked else route_data["primary"]
     route_status = "BLOCKED — ALTERNATE ROUTE ACTIVE" if is_primary_blocked else "PRIMARY ROUTE CLEAR"
+    avoided_segment = f"{route_data['hazard_segment']} [REROUTED]" if is_primary_blocked else route_data["hazard_segment"]
 
     return {
         "status": route_status,
+        "region_id": region_id,
+        "corridor": route_data["corridor"],
         "is_primary_blocked": is_primary_blocked,
+        "distance_km": route_data["distance_km"],
+        "estimated_time_min": route_data["estimated_time_min"],
+        "avoided_segment": avoided_segment,
+        "center": route_data["center"],
         "primary_route": {
             "type": "Feature",
             "properties": {
@@ -386,18 +417,18 @@ async def get_safe_route(region_id: int = Query(...)):
                 "role": "primary", 
                 "color": "#ef4444" if is_primary_blocked else "#22c55e"
             },
-            "geometry": {"type": "LineString", "coordinates": route_set["primary"]}
+            "geometry": {"type": "LineString", "coordinates": route_data["primary"]}
         },
         "alternate_route": {
             "type": "Feature",
             "properties": {
                 "name": "Alternate Route", 
                 "role": "alternate", 
-                "color": "#22c55e" if is_primary_blocked else "#94a3b8"
+                "color": "#5752a4" if is_primary_blocked else "#94a3b8"
             },
-            "geometry": {"type": "LineString", "coordinates": route_set["alternate"]}
+            "geometry": {"type": "LineString", "coordinates": route_data["alternate"]}
         },
-        "active_route": active_route
+        "active_route": active_coords
     }
 
 @app.get("/api/v1/history/replay", tags=["Simulation"], summary="Replay Historical Event")

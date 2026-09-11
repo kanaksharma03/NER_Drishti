@@ -1,89 +1,287 @@
-# NER-DRISHTI Project Knowledge Base & Summary
+# NER-DRISHTI: System Architecture & Technical Knowledge Base
 
-This document serves as the comprehensive history, summary, and current state of the **NER-DRISHTI** project. It outlines our core features, Minimum Viable Product (MVP), Unique Selling Proposition (USP), and how our approach differentiates from existing solutions in the market.
+This document provides a comprehensive, production-grade architectural specification of **NER-DRISHTI**, an AI-powered Landslide Early-Warning and Decision-Support Platform built for the North Eastern Region (NER) of India. 
 
-## 1. Project Summary & Problem Statement
-**NER-DRISHTI** is an AI-powered landslide early-warning and decision-support platform tailored specifically for the North Eastern Region (NER) of India (addressing SIH problem statement 26001). 
+It is designed as an authoritative technical blueprint: any engineer or system architect can use this specification to understand, construct, deploy, or scale the complete end-to-end system architecture.
 
-The platform aims to answer four critical questions for disaster management authorities and citizens:
-1. **What is the risk?** (Predicting probability and severity)
-2. **Where is the risk?** (Pinpointing high-risk zones on a GIS map)
-3. **Why is it happening?** (Providing interpretable AI explanations)
-4. **What should we do?** (Recommending actionable steps based on priority)
+---
 
-Currently, the system supports multiple pilot regions including **Arunachal Pradesh (NH-13)**, **Sikkim (NH-10)**, and **Meghalaya (NH-6)**, with architecture in place to scale pan-NER.
+## 1. System Overview & Core Objective
 
-## 2. Minimum Viable Product (MVP) Scope
-Our MVP has been scoped to prioritize immediate value and functionality without relying on complex, unscalable hardware:
-- **Software-Only Approach**: Unlike traditional systems that rely on expensive, easily-damaged physical IoT sensors (tilt-meters, boreholes), our MVP relies purely on data integration. Soil saturation and weather data are dynamically sourced from **ERA5-Land / Open-Meteo**.
-- **Multi-Region Scalability**: The MVP supports switching between multiple states and districts dynamically, proving efficacy across varied terrains before scaling pan-India.
-- **Rule-Based to ML Pipeline**: We verify learned predictions using rule-based heuristics before promoting them to authorities, ensuring trust and explainability.
+**NER-DRISHTI** addresses high-frequency landslide risks along critical national highway corridors in North East India (e.g., NH-13 in Arunachal Pradesh, NH-10 in Sikkim, and NH-6 in Meghalaya). 
 
-## 3. Core Features & Capabilities
-We have successfully implemented the following core functional areas:
-1. **Dynamic Risk GIS Map**: A MapLibre-powered dashboard rendering a dynamic hazard grid colored strictly by model severity tiers (Low, Moderate, High, Critical).
-2. **"What-If" Simulation**: A cloudburst simulator allowing authorities to inject artificial rainfall deltas (+50mm, +100mm) to foresee potential risk escalations instantly without corrupting live data.
-3. **Safe Evacuation Routing**: Dynamic routing that intelligently avoids "Critical-tier" road segments, ensuring evacuation paths are actually safe.
-4. **Citizen Reporting Pipeline (PWA)**: A secure pipeline for locals to submit field reports (with photos, coordinates, and descriptions) to crowdsource verification.
-5. **Historical Event Replay**: The ability to playback historical landslide events (e.g., Dima Hasao 2022) to study the timeline of risk modifiers leading up to a disaster.
-6. **Multi-tier Alerting**: Dispatched alerts categorized by severity (P1, P2, P3) and audience (Authority vs. Public).
+The platform delivers real-time situational awareness and actionable decision support across four pillars:
+1. **Risk Prediction**: Probability (0–100%) and 4-tier severity rating (*Low*, *Moderate*, *High*, *Critical*).
+2. **Geospatial Mapping**: High-resolution, corridor-aligned terrain grid overlay on interactive GIS maps.
+3. **Explainable AI (XAI)**: SHAP (SHapley Additive exPlanations) factor contribution attribution for every grid cell.
+4. **Actionable Operations**: Region-specific impacted road segment detection, automated evacuation rerouting around hazard segments, and multi-tier public/authority alerting.
 
-## 4. Unique Selling Proposition (USP) & Market Differentiation
-### How We Differ from Existing Products
-Most existing landslide warning systems rely heavily on expensive, hyper-localized IoT networks that are difficult to maintain in the harsh terrain of North East India. 
-- **No Hardware Dependency**: By leveraging satellite telemetry (Copernicus DEM) and global weather models (Open-Meteo), we drastically reduce deployment and maintenance costs.
-- **Offline-First Resilience**: Our citizen reporting PWA uses an IndexedDB queue to persist reports when offline, auto-syncing when connectivity returns—vital for the notoriously poor network zones in the NER.
-- **Explainable AI (XAI)**: We don't just output a "Red Alert." We provide the *why*. 
+---
 
-## 5. The Machine Learning Model & Differences
-- **Model Choice**: We utilize an **XGBoost classifier** (over generic neural networks) because tabular spatial data (slope, elevation, historical rainfall) heavily benefits from tree-based ensembles.
-- **TreeSHAP Integration**: Every risk prediction is passed through a SHAP (SHapley Additive exPlanations) explainer. The frontend explicitly shows authorities the top contributing factors (e.g., *24H Rainfall contributed +0.15*, *Slope contributed +0.10*). This turns a "black box" prediction into an auditable, transparent recommendation.
-- **Spatial Cross-Validation**: To prevent data leakage (a common flaw in geospatial ML where nearby training points falsely inflate accuracy), we train using strict spatial blocking techniques.
+## 2. High-Level Architecture
 
-## 6. Project History & Milestones Achieved
-- **Phase 1 (Scaffolding)**: Successfully initialized the FastAPI backend, SQLite database, and Vite/React frontend with MapLibre GL.
-- **Phase 2 (Design Overhaul)**: Transitioned the UI from a generic SaaS look to a professional, dark-sidebar "Command Center" aesthetic suitable for government and emergency operations.
-- **Phase 3 (GIS & Data Integration)**: Connected the frontend directly to the FastAPI endpoints (`/api/v1/risk/grid`, `/api/v1/weather/current`, `/api/v1/reports`). 
-- **Phase 4 (Functional Audit)**: Removed all frontend mock data. Ensured all KPI counts, map colors, drawer data, and infrastructure logs strictly mirror the actual Python backend logic. Implemented robust Loading, Empty, and Error states across all panels.
-- **Phase 5 (Multi-Region Support)**: Re-architected the backend and database to support dynamic region switching (Arunachal Pradesh, Sikkim, Meghalaya) and seeded the database with region-specific terrain and weather data.
+The system follows a decoupled, API-first client-server architecture:
 
-## 7. System Architecture
-The NER-DRISHTI system follows a decoupled, API-driven client-server architecture:
-- **Frontend (Client)**: Built with React, Vite, and MapLibre GL. It acts as the "Command Center" dashboard for authorities and the PWA for citizen reporting. It is entirely stateless and relies on the backend for all data and ML insights.
-- **Backend (Server)**: Built with Python and FastAPI. It exposes RESTful API endpoints (`/api/v1/*`) to serve risk predictions, process citizen reports, and distribute alerts. It uses a SQLite database (via SQLAlchemy and aiosqlite) for MVP storage.
-- **External Integrations**: The backend continuously polls the Open-Meteo API to ingest live weather data (precipitation, soil moisture) into the database, keeping the ML predictions fresh.
+```mermaid
+graph TD
+    subgraph External Data Layer
+        OM[Open-Meteo API] -->|Live Weather Ingest| ING[Ingest Service]
+    end
 
-## 8. Frontend and Backend Workflow System
+    subgraph Backend Services - FastAPI / Python
+        ING -->|Rainfall & Soil Moisture| DB[(SQLite / SQLAlchemy DB)]
+        ING -->|Weather Obs| DB
+        
+        API[FastAPI Application] <--> DB
+        
+        subgraph ML Engine
+            INF[Inference Service / XGBoost] -->|Probability & Severity| API
+            SHAP[TreeSHAP Explainer] -->|Feature Contributions| API
+        end
 
-```text
-[ BACKGROUND PROCESS ]
-External Weather API ──(fetches every 1 min)──> Backend ──(calculates 72h rain sums)──> Database
+        subgraph Routing & Operations Engine
+            RTE[Evacuation Router] -->|Primary vs Alternate Path| API
+            IMP[Impacted Roads Evaluator] -->|Hazard Segment Matching| API
+        end
+    end
 
-[ CITIZEN REPORT FLOW ]
-Mobile App User ──(uploads photo + location)──> Backend ──(checks EXIF for spoofing)──> Groups into Clusters ──> Database
+    subgraph Frontend Client - React / Vite / TypeScript
+        UI[Command Center Dashboard] <-->|REST APIs via React Query| API
+        
+        subgraph GIS Map Component Engine
+            ML[MapLibre GL JS Basemap]
+            SVG[Projected SVG Polygon Layer]
+            ML -->|Viewport Sync map.project| SVG
+        end
 
-[ MAIN PREDICTION FLOW ]
-Frontend Map ──(sends latitude/longitude & region_id)──> Backend API
-                                                              │
-                                                              ▼
-                                    1. Fetch Terrain & Weather from Database for that location
-                                                              │
-                                                              ▼
-                                    2. Heuristic ML Model calculates probability (0-100%)
-                                                              │
-                                                              ▼
-                                    3. SHAP Engine determines the "Why" (top contributing factors)
-                                                              │
-                                                              ▼
-                                    4. Verification Engine cross-checks with Citizen Reports & Soil Moisture
-                                                              │
-                                                              ▼
-                                    5. If Critical + Confident ──> Trigger Alerts
-                                                              │
-                                                              ▼
-Frontend Dashboard <──(Returns JSON with Probability, Severity, and SHAP explanations)── Backend API
+        UI --> ML
+        UI --> SVG
+    end
 ```
 
-## 9. Next Steps & Technical Debt
-- **Crowdsourcing Validation Loop**: Further refine the Bayesian-style confidence uplift, where a verified citizen report automatically nudges the nearest XGBoost prediction's confidence score higher.
-- **Scale Database**: Migrate from SQLite to PostgreSQL with PostGIS extensions to handle larger, pan-India datasets natively and perform complex spatial queries more efficiently.
+---
+
+## 3. Technology Stack
+
+### Frontend Architecture
+* **Framework**: React 18 + TypeScript + Vite
+* **Routing**: Wouter (`/`, `/reports`, `/operations`, `/replay`, `/login`)
+* **State & Query Management**: `@tanstack/react-query` (with 20s stale-time & auto-refetch)
+* **GIS & Map Engine**: MapLibre GL JS + Projected SVG Overlay Engine
+* **Styling & UI**: Vanilla CSS Design Tokens (`index.css`), TailwindCSS, Lucide Icons, Shadcn UI primitives
+
+### Backend Architecture
+* **Framework**: Python 3.13 + FastAPI + Uvicorn
+* **Database**: SQLite (`nerdrishti.db`) via SQLAlchemy Async Engine (`aiosqlite`)
+* **ML & Explainability**: XGBoost Classifier fallback + SHAP (SHapley Additive exPlanations)
+* **API Rate Limiting**: Slowapi (`60 requests/minute` per client IP)
+* **Client Generation**: OpenAPI REST client specification (`@workspace/api-client-react`)
+
+---
+
+## 4. Data Model & Database Schema
+
+The database relies on 6 core entities managed via SQLAlchemy ORM models (`backend/models.py`):
+
+```mermaid
+erDiagram
+    Region ||--o{ TerrainGrid : "contains"
+    Region ||--o{ WeatherObservation : "monitors"
+    Region ||--o{ IncidentCluster : "tracks"
+    Region ||--o{ CitizenReport : "receives"
+    Region ||--o{ AlertLog : "dispatches"
+
+    Region {
+        int id PK
+        string state
+        string district
+        string corridor_name
+        float center_lat
+        float center_lon
+    }
+
+    TerrainGrid {
+        int id PK
+        int region_id FK
+        float lat
+        float lon
+        float elevation
+        float slope
+        float aspect_sin
+        float aspect_cos
+        float plan_curvature
+        float profile_curvature
+        float twi
+    }
+
+    WeatherObservation {
+        int id PK
+        int region_id FK
+        datetime timestamp
+        float rainfall_1h
+        float rainfall_24h_sum
+        float rainfall_72h_sum
+        float soil_moisture
+    }
+
+    CitizenReport {
+        int id PK
+        int region_id FK
+        int cluster_id FK
+        string report_type
+        string description
+        float lat
+        float lon
+        string photo_path
+        boolean is_spoofed
+        datetime submitted_at
+    }
+
+    AlertLog {
+        int id PK
+        int region_id FK
+        string audience_tier
+        string severity_tier
+        string channel
+        string recipient
+        string message_payload
+        string status
+        datetime sent_at
+    }
+```
+
+---
+
+## 5. Core Subsystem & Component Specifications
+
+### 5.1. Situation Room & Risk Grid Engine (`/`)
+* **Grid Seeding & Corridor Alignment**:
+  * Terrain grid cells are seeded along real highway corridor waypoints rather than arbitrary rectangular blocks:
+    * **Region 1 (Arunachal Pradesh - NH-13)**: Bhalukpong (`27.15°N, 92.40°E`) $\rightarrow$ Rupa $\rightarrow$ Bomdila (`27.28°N, 92.60°E`).
+    * **Region 2 (Sikkim - NH-10)**: Gangtok (`27.33°N, 88.61°E`) $\rightarrow$ Nathula Corridor (`27.42°N, 88.70°E`).
+    * **Region 3 (Meghalaya - NH-6)**: Shillong (`25.57°N, 91.88°E`) $\rightarrow$ Cherrapunji (`25.35°N, 91.70°E`).
+  * 100 georeferenced cells per region form an elongated corridor ribbon. Each cell geometry is defined as a polygon (`d = 0.002` degrees ~400m cell size), providing visual gaps between cells.
+* **Map Projection Overlay Engine**:
+  * Instead of raster tile layers, `RiskMap` uses a high-performance SVG overlay synchronized with MapLibre's projection matrix via `map.project([lon, lat])` on `move`, `zoom`, and `resize` events.
+  * **Color Tier Scale**:
+    * **Low ($<20\%$)**: Green (`#55a477`, fill opacity `0.22`)
+    * **Moderate ($20\%-50\%$)**: Yellow (`#e0bd4d`, fill opacity `0.38`)
+    * **High ($50\%-80\%$)**: Orange (`#d88937`, fill opacity `0.38`)
+    * **Critical ($>80\%$)**: Red (`#bb4a48`, fill opacity `0.38`)
+  * Solid stroke outlines (`#0f172a`) combined with controlled fill opacity ensure OpenStreetMap labels (*Bomdila*, *Rupa*, *Namfri*) and road geometry remain 100% legible beneath the grid.
+* **Interactive Cell Popups & Single Source of Truth**:
+  * Clicking a grid cell opens a styled MapLibre Popup (`#0f172a` solid container, elevated drop shadow, 2-column metric grid).
+  * Both the map popup and the **RISK DETAIL / EXPLAIN** side panel consume `cell.probability` as the single ground truth probability (formatted identically as `26.4%`).
+  * The side panel renders SHAP feature attribution bars (*Slope Gradient*, *Elevation*, *24h Rainfall*, *Soil Saturation*, *Proximity to Road Cut*).
+* **"What-If" Simulation Panel**:
+  * Accepts artificial rainfall deltas (`rainfall_delta` in mm, with leading zeros stripped).
+  * Immediately recomputes grid probabilities across all cells, updating counts and shifting map cell colors to Orange/Red in real time without mutating backend base telemetry.
+
+### 5.2. Operations & Safe Evacuation Routing (`/operations`)
+* **Impacted Roads Table**:
+  * Queries `GET /api/v1/roads-impacted?region_id=...`.
+  * Dynamically returns region-specific highway hazards:
+    * **NH-13 (Region 1)**: `NH-13` (Critical, Bhalukpong–Bomdila Stretch) & `SH-4` (High, Tenga Valley Cut)
+    * **NH-10 (Region 2)**: `NH-10` (Critical, Gangtok–Nathula Corridor) & `Ranka Road` (Moderate)
+    * **NH-6 (Region 3)**: `NH-6` (Critical, Shillong–Cherrapunji Highway) & `Mawkdok Road` (High)
+* **Safe Evacuation Router**:
+  * Queries `GET /api/v1/routes/safe?region_id=...`.
+  * Evaluates primary route coordinates against active Critical-tier cells. If an intersection is detected, flags `is_primary_blocked = True` and switches active navigation to the alternate route.
+* **Route Map & Camera Sync**:
+  * On region selection, `RouteMap` executes `map.flyTo({ center: routeData.center, zoom: 11 })` and `fitBounds`, re-centering the map view to the selected region's exact geographic bounds.
+* **Avoided Segment Consistency**:
+  * Populates the **Avoided Segment** metric directly from `routeData.avoided_segment` (e.g. `"Gangtok Slide Cut (KM 24)"`), maintaining total consistency with the Impacted Roads table.
+
+### 5.3. Event Replay Engine (`/replay`)
+* **Historical Timeline Playback**:
+  * Simulates risk propagation over a 48-hour timeline (e.g. Dima Hasao 2022 event):
+    * **T-48h (0.0 modifier)**: Normal baseline conditions (Green grid).
+    * **T-24h (+0.2 modifier)**: Rainfall accumulation begins (Yellow moderate risk).
+    * **T-6h (+0.5 modifier)**: Soil saturation critical (Orange high risk).
+    * **T-0h (+0.8 modifier)**: Landslide initiation (Red critical risk near slide location).
+* **Synchronized Map Rendering**:
+  * Uses `ReplayMap` with projected SVG grid rendering. Stepping through scrubber frames or clicking **Play** updates cell colors in real time alongside numerical readouts.
+
+### 5.4. Citizen Reporting & Crowd Verification (`/reports`)
+* **Citizen Report Submission**:
+  * Allows field users to submit geo-tagged incident reports (location, type, photo, description).
+* **EXIF Verification & Clustering**:
+  * Backend checks coordinate metadata against submitted values to flag spoofed reports (`is_spoofed`) and groups verified reports into `IncidentCluster` entities.
+
+---
+
+## 6. API Reference Specifications
+
+### Risk & Terrain Grid APIs
+* `GET /api/v1/regions`
+  * Returns list of supported monitoring regions with center coordinates.
+* `GET /api/v1/risk/grid?region_id={id}&rainfall_delta={mm}`
+  * Returns GeoJSON `FeatureCollection` of 100 corridor-aligned polygon cells with elevation, slope, and computed probability properties.
+* `GET /api/v1/risk?lat={lat}&lon={lon}`
+  * Performs ML inference and returns risk probability, severity tier, and top SHAP feature contributions for exact coordinates.
+
+### Operations & Routing APIs
+* `GET /api/v1/roads-impacted?region_id={id}`
+  * Returns list of impacted road segments, highway classifications, risk levels, and affected stretch descriptions for the region.
+* `GET /api/v1/routes/safe?region_id={id}`
+  * Returns primary LineString geometry, alternate LineString geometry, blocked status, avoided hazard segment, distance (km), estimated time (min), and bounding center coordinates.
+
+### Event Replay & Weather APIs
+* `GET /api/v1/history/replay`
+  * Returns timeline frame objects (`time`, `risk_modifier`, `description`) for event playback.
+* `GET /api/v1/weather/current?region_id={id}`
+  * Returns latest 1h, 24h, 72h cumulative rainfall and soil moisture readings.
+
+### Alerting & Citizen Report APIs
+* `GET /api/v1/alerts` / `GET /api/v1/reports`
+  * Returns active system alerts and submitted citizen incident reports.
+
+---
+
+## 7. Execution & Deployment Guide
+
+### Prerequisites
+* **Python**: 3.13+ with `venv`
+* **Node.js**: 20+ with `pnpm`
+
+### 1. Backend Setup & Startup
+```powershell
+# Navigate to backend directory
+cd backend
+
+# Activate virtual environment
+.\venv\Scripts\Activate.ps1
+
+# Run idempotent database seed (populates regions, corridor cells, demo alerts)
+python seed.py
+
+# Start FastAPI server on port 8001
+python -m uvicorn main:app --reload --port 8001
+```
+
+### 2. Frontend Setup & Startup
+```powershell
+# Navigate to frontend directory
+cd NER-FRONTEND\Frontend_NER\artifacts\ner-drishti
+
+# Install dependencies (if needed)
+pnpm install
+
+# Start Vite dev server on port 5173
+pnpm dev
+
+# Perform TypeScript validation
+pnpm tsc --noEmit
+
+# Build production distribution bundle
+$env:PORT="5173"; $env:BASE_PATH="/"; pnpm build
+```
+
+---
+
+## 8. Summary of Architectural Guarantees
+
+1. **Hardware-Free Telemetry**: System relies purely on satellite digital elevation models (Copernicus DEM) and global meteorological reanalysis (Open-Meteo / ERA5), eliminating physical IoT maintenance overhead.
+2. **Corridor-Aligned GIS Precision**: Grid cells follow highway paths directly rather than arbitrary bounding boxes.
+3. **Single Source of Truth**: All component visualizations (map overlays, detail drawers, popups) draw from identical backend model properties.
+4. **Real-Time Responsiveness**: Projected SVG map layer ensures crisp polygon rendering, instant reactivity to simulation controls, and smooth map interactions.

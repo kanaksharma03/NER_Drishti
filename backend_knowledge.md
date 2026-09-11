@@ -1,174 +1,223 @@
-# NER-Drishti Backend Knowledge Base
+# NER-DRISHTI: Backend System Architecture & Knowledge Base
 
-Welcome to the backend documentation for the NER-Drishti Early Warning System! This file explains how the backend works in very simple terms so that anyone with basic programming knowledge can understand it.
-
-## 1. What the Backend Is
-The backend is the "brain" of the NER-Drishti application. It is a web server that handles requests from the user interface (frontend), fetches weather data, runs the landslide risk calculations, processes citizen reports, and sends out alerts. It acts as the bridge between the database, the predictive model, and the users.
-
-## 2. Backend Folder Structure
-The backend code lives inside the `backend/` folder. Here are the most important files and folders:
-- **`main.py`**: The entry point of the server. It contains all the API endpoints (URLs) that the frontend can call.
-- **`models.py`**: Defines the structure of the database. It tells the system what tables exist and what columns they have (like a spreadsheet blueprint).
-- **`database.py`**: Handles the connection to the database.
-- **`requirements.txt`**: A list of all the external Python tools and libraries the project needs to run.
-- **`services/`**: A folder containing the core logic separated into different files:
-  - `weather.py`: Fetches and processes weather data.
-  - `inference.py`: Runs the landslide risk prediction.
-  - `reports.py`: Handles citizen incident reports and grouping them.
-  - `verification.py`: Cross-checks predictions with real-world signals.
-  - `alerts.py`: Handles sending notifications.
-  - `exif.py`: Checks photos for fake/spoofed locations.
-
-## 3. How the Backend Starts/Runs
-The backend runs using a tool called **Uvicorn**, which is a fast server for Python applications. When the server starts up (by running `main.py`), it also creates the database tables if they don't exist and launches a background task that automatically fetches weather data every 1 minute.
-
-## 4. Technologies and Libraries Used
-- **Python**: The main programming language.
-- **FastAPI**: The web framework used to create the API endpoints quickly and securely.
-- **Uvicorn**: The server that runs the FastAPI application.
-- **SQLAlchemy (Async)** & **aiosqlite**: Tools to interact with the database using Python code instead of raw SQL queries.
-- **HTTPX**: A library to make requests to external services (like the Open-Meteo weather API).
-- **PyJWT**: For creating secure "tokens" for user logins.
-- **ExifRead**: To read hidden location data inside uploaded photos.
-
-## 5. Database and Tables/Models
-The project uses **SQLite**, a lightweight database stored in a single file (`nerdrishti.db`), perfect for a demo. The database has several tables (models):
-- **`TerrainGrid`**: Stores land information (elevation, slope) for different map coordinates.
-- **`Road`**: Stores highway information.
-- **`WeatherObservation`**: Stores past and current weather data like rainfall and soil moisture.
-- **`RiskPrediction`**: Saves the results of the landslide risk calculations.
-- **`RiskExplanation`**: Stores the reasons *why* a certain risk was predicted (SHAP values).
-- **`IncidentCluster`**: Groups nearby citizen reports together.
-- **`CitizenReport`**: Stores details and photos uploaded by users.
-- **`VerificationResult`**: Stores confidence scores that check if a risk prediction is realistic.
-- **`Recommendation`**: Stores automated suggestions (like "Deploy field officer").
-- **`AlertLog`**: A history of warning messages sent out.
-
-## 6. Important API Endpoints
-Endpoints are specific URLs the frontend calls to perform actions.
-
-### Get Landslide Risk Prediction
-- **Purpose**: Calculates the current landslide risk for a specific location.
-- **Method**: `GET`
-- **Endpoint**: `/api/v1/risk`
-- **Input**: Latitude (`lat`) and Longitude (`lon`).
-- **Output**: The probability of a landslide, a severity tier (Low, Moderate, High, Critical), and the top factors causing the risk.
-- **What happens internally**: It fetches terrain data for that spot, gets the latest weather (last 72 hours of rain), calculates a heuristic risk score, generates explanations, saves everything to the database, and returns the result.
-
-### Submit Citizen Report
-- **Purpose**: Allows users to report incidents like fallen trees or minor slips.
-- **Method**: `POST`
-- **Endpoint**: `/api/v1/reports/submit`
-- **Input**: Report type, description, latitude, longitude, and an image file (`photo`).
-- **Output**: Success status, whether the photo was flagged as fake, and a cluster ID.
-- **What happens internally**: It checks the photo's hidden data (EXIF) to ensure the photo's location matches the reported location (spoof detection). If valid, it looks for other recent reports within 300 meters and groups them together into a "Cluster".
-
-### Get Hazard Grid
-- **Purpose**: Provides data to draw a colored risk map on the frontend.
-- **Method**: `GET`
-- **Endpoint**: `/api/v1/risk/grid`
-- **Input**: `rainfall_delta` (optional, to simulate a sudden cloudburst).
-- **Output**: A list of geographic shapes (GeoJSON) with risk probabilities for each area.
-- **What happens internally**: It grabs up to 200 terrain points, calculates a quick risk score based on slope, elevation, and the simulated rainfall, and packages them as small map squares.
-
-### Authentication (Login)
-- **Purpose**: Gives users a secure token to prove who they are.
-- **Method**: `POST`
-- **Endpoint**: `/api/v1/token`
-- **Input**: Username and Password.
-- **Output**: An access token.
-- **What happens internally**: For the demo, if you use "admin" and "password", you get "authority" privileges. Otherwise, you get "public" access.
-
-## 7. Request and Response Data in Simple Language
-When the frontend asks the backend a question (Request), it usually sends small bits of text, like `lat=27.02&lon=92.65`.
-The backend answers (Response) using **JSON**, which looks like a simple dictionary.
-For example, a risk response looks like this:
-"Latitude 27.02, Longitude 92.65 has an 85% probability of a landslide. This is a CRITICAL severity. The biggest reason is the heavy rainfall over the last 72 hours."
-
-## 8. Authentication/JWT Flow
-When a user logs in, the backend checks their credentials and hands them a **JSON Web Token (JWT)**. This token is like a digital ID card. For any protected endpoint (like viewing sensitive authority data), the frontend must show this ID card to the backend to get access.
-
-## 9. Risk Prediction/ML Model
-For this demo, the backend uses a **Heuristic Model** (a smart rule-based calculation) instead of a heavy neural network. 
-It calculates risk by combining:
-1. **Slope**: Steeper hills increase risk.
-2. **Rainfall**: The amount of rain over the last 72 hours increases risk.
-3. A tiny bit of random noise to make the demo feel realistic.
-It clamps the final probability between 0% and 100% and assigns a tier: Low (<30%), Moderate (<60%), High (<80%), or Critical (80%+).
-
-## 10. SHAP/TreeSHAP Explanation
-SHAP values answer the question: *"Why did the model make this prediction?"* 
-Instead of just saying "High Risk", the backend calculates "Contribution Values" for different factors. It might say:
-- Historical Rain added +40% to the risk.
-- Steep Slope added +30% to the risk.
-- High Elevation reduced the risk by -5%.
-These explanations are saved in the database and sent to the frontend so the user can understand the "Why".
-
-## 11. Weather Data Flow
-1. Every 1 minute, a background task automatically wakes up.
-2. It reaches out to the free **Open-Meteo API** to get weather forecasts and history for 3 specific locations in Arunachal Pradesh.
-3. It calculates how much rain fell in the last 1 hour, 24 hours, and 72 hours.
-4. It saves this fresh data into the `WeatherObservation` table so the predictive model always has the latest numbers.
-
-## 12. Risk Grid Generation
-When the frontend needs to show the map, the backend takes a grid of terrain points. It looks at the slope and elevation of each point, applies the current (or simulated) rainfall, calculates a live risk score for every single point, and sends back geographic coordinates to draw colored boxes (green, yellow, red) on the map.
-
-## 13. Alerts
-If the system detects a High or Critical risk, the **Verification Engine** kicks in. If it's confident it's a real threat, the `alerts.py` service creates a log entry detailing who needs to be warned (public vs. authorities), the severity, and the message payload (e.g., SMS or in-app notification).
-
-## 14. Roads Impacted / Safe Routes
-- **Impacted Roads**: The backend can identify which highways intersect with critical risk zones. (Currently mocks a return showing NH-13 is impacted).
-- **Safe Routes**: Provides coordinates for a safe path that dodges the high-risk areas so people can evacuate safely.
-
-## 15. Citizen Reports
-Users can snap a photo of a minor landslide or blocked road and submit it. The backend saves this report. Because one fallen tree might be reported by 10 different drivers, the backend groups reports that are within 300 meters of each other and submitted within the last 12 hours into a single "Incident Cluster".
-
-## 16. Verification/Spoof Detection
-- **Spoof Detection**: When a photo is uploaded, the `exif.py` script reads the hidden GPS coordinates embedded in the image file. If the photo's internal location is way off from where the user claims to be, it marks the report as "spoofed" (fake).
-- **Verification Engine**: Before sounding a massive alarm, the backend checks: "Is the weather data fresh?", "Is the soil actually saturated?", "Are there citizen reports nearby?". This increases or decreases the "Confidence Score" of the prediction.
-
-## 17. How Frontend Communicates with Backend
-They talk over the internet using standard HTTP protocols. The frontend sends a `GET` request to retrieve data (like viewing the risk) or a `POST` request to send data (like uploading a photo). The backend has **CORS (Cross-Origin Resource Sharing)** enabled, which allows the frontend website to safely request data from the backend server.
-
-## 18. Environment Variables/Configuration
-Sensitive settings and configurations (like database links) are kept out of the main code. They are stored in a `.env` file. The backend reads this file when it starts up.
-
-## 19. Important Dependencies
-- `fastapi` & `uvicorn`: For the web server.
-- `sqlalchemy` & `aiosqlite`: For talking to the SQLite database asynchronously.
-- `httpx`: For downloading external weather data.
-- `ExifRead`: For catching fake photo uploads.
-- `PyJWT`: For handling secure logins.
+This document provides a comprehensive technical blueprint of the **NER-DRISHTI** backend service. It details the server structure, database schema, service layer logic, REST API contracts, machine learning inference engine, and multi-region routing pipeline.
 
 ---
 
-## 20. Backend Workflow in One View
+## 1. Executive Summary & Purpose
+
+The backend acts as the core decision-support engine for the NER-DRISHTI Landslide Early-Warning System. It is built with **Python 3.13** and **FastAPI**. 
+
+It handles:
+1. **Dynamic Risk Inference & GeoJSON Grid Generation**: Serves corridor-aligned hazard grid cells colored by risk severity tiers.
+2. **Explainable AI (XAI)**: Calculates TreeSHAP contribution factors explaining the drivers behind every prediction.
+3. **Evacuation Routing & Road Impact Assessment**: Evaluates primary vs. alternate highway routes against active Critical risk cells per region.
+4. **Weather Telemetry Ingestion**: Automatically polls live weather telemetry (rainfall accumulation & soil moisture) from Open-Meteo API.
+5. **Citizen Report Ingestion & EXIF Verification**: Processes user reports, detects photo coordinate spoofing, and clusters nearby incident reports.
+6. **Multi-Tier Alert Dispatch**: Generates audience-scoped alerts (Authority SDMA vs. Public).
+
+---
+
+## 2. Directory Structure & Architecture
 
 ```text
-[ BACKGROUND PROCESS ]
-External Weather API ──(fetches every 1 min)──> Backend ──(calculates 72h rain sums)──> Database
-
-[ CITIZEN REPORT FLOW ]
-Mobile App User ──(uploads photo + location)──> Backend ──(checks EXIF for spoofing)──> Groups into Clusters ──> Database
-
-[ MAIN PREDICTION FLOW ]
-Frontend Map ──(sends latitude/longitude)──> Backend API
-                                                  │
-                                                  ▼
-                        1. Fetch Terrain & Weather from Database for that location
-                                                  │
-                                                  ▼
-                        2. Heuristic ML Model calculates probability (0-100%)
-                                                  │
-                                                  ▼
-                        3. SHAP Engine determines the "Why" (top contributing factors)
-                                                  │
-                                                  ▼
-                        4. Verification Engine cross-checks with Citizen Reports & Soil Moisture
-                                                  │
-                                                  ▼
-                        5. If Critical + Confident ──> Trigger Alerts
-                                                  │
-                                                  ▼
-Frontend Dashboard <──(Returns JSON with Probability, Severity, and SHAP explanations)── Backend API
+backend/
+├── main.py               # FastAPI application entry point, CORS, Rate limiting & REST routes
+├── models.py             # SQLAlchemy ORM models (SQLite nerdrishti.db)
+├── database.py           # Async database engine & session creation (aiosqlite)
+├── seed.py               # Idempotent database seeder (Regions, Corridor cells, Demo alerts)
+├── requirements.txt      # Dependency manifest
+└── services/             # Domain logic and service layers
+    ├── ingest.py         # Weather telemetry ingest from Open-Meteo REST API
+    ├── inference.py      # XGBoost ML inference & TreeSHAP explainer engine
+    ├── routing.py        # Safe evacuation route calculation & hazard intersection
+    ├── reports.py        # Citizen report clustering & incident management
+    ├── verification.py   # Multi-signal confidence verification loop
+    ├── alerts.py         # Multi-tier notification dispatching
+    └── exif.py           # Photo EXIF coordinate extraction & spoof detection
 ```
+
+---
+
+## 3. Tech Stack & Dependencies
+
+* **Python 3.13**: Runtime environment.
+* **FastAPI**: Modern, asynchronous web framework for REST API construction.
+* **Uvicorn**: ASGI server runner.
+* **SQLAlchemy 2.0 (Async) + aiosqlite**: Asynchronous ORM and driver for SQLite storage (`nerdrishti.db`).
+* **HTTPX**: Async HTTP client for polling external meteorological APIs.
+* **Slowapi**: IP-based API rate limiting (`60 requests/minute`).
+* **XGBoost & SHAP**: Machine learning inference and feature contribution attribution.
+* **ExifRead**: Binary EXIF extraction for image coordinate verification.
+* **PyJWT**: JSON Web Token authentication for authority role scoping.
+
+---
+
+## 4. Database Schema & Entity Relationships
+
+The SQLite database (`nerdrishti.db`) maintains 6 primary tables:
+
+```mermaid
+erDiagram
+    Region ||--o{ TerrainGrid : "contains (100 corridor cells)"
+    Region ||--o{ WeatherObservation : "monitors (1h/24h/72h rain)"
+    Region ||--o{ IncidentCluster : "tracks"
+    Region ||--o{ CitizenReport : "receives"
+    Region ||--o{ AlertLog : "dispatches"
+
+    Region {
+        int id PK
+        string state
+        string district
+        string corridor_name
+        float center_lat
+        float center_lon
+    }
+
+    TerrainGrid {
+        int id PK
+        int region_id FK
+        float lat
+        float lon
+        float elevation
+        float slope
+        float aspect_sin
+        float aspect_cos
+        float plan_curvature
+        float profile_curvature
+        float twi
+    }
+
+    WeatherObservation {
+        int id PK
+        int region_id FK
+        datetime timestamp
+        float rainfall_1h
+        float rainfall_24h_sum
+        float rainfall_72h_sum
+        float soil_moisture
+    }
+
+    CitizenReport {
+        int id PK
+        int region_id FK
+        int cluster_id FK
+        string report_type
+        string description
+        float lat
+        float lon
+        string photo_path
+        boolean is_spoofed
+        datetime submitted_at
+    }
+
+    AlertLog {
+        int id PK
+        int region_id FK
+        string audience_tier
+        string severity_tier
+        string channel
+        string recipient
+        string message_payload
+        string status
+        datetime sent_at
+    }
+```
+
+---
+
+## 5. Core Services & Logic Breakdown
+
+### 5.1. Hazard Grid & Corridor Seeding Engine (`seed.py` & `main.py`)
+* **Highway Corridor Geometry**:
+  `seed.py` generates 100 georeferenced terrain grid cells per region aligned along actual highway waypoints:
+  * **Region 1 (Arunachal Pradesh - NH-13)**: Bhalukpong (`27.15°N, 92.40°E`) $\rightarrow$ Rupa $\rightarrow$ Bomdila (`27.28°N, 92.60°E`).
+  * **Region 2 (Sikkim - NH-10)**: Gangtok (`27.33°N, 88.61°E`) $\rightarrow$ Nathula Corridor (`27.42°N, 88.70°E`).
+  * **Region 3 (Meghalaya - NH-6)**: Shillong (`25.57°N, 91.88°E`) $\rightarrow$ Cherrapunji (`25.35°N, 91.70°E`).
+* **Polygon Extent (`d = 0.002`)**:
+  `GET /api/v1/risk/grid` constructs polygon boundaries with `d = 0.002` degrees (~400m cell size), providing visual separation between cells along the corridor strip.
+* **Risk Probability Calculation**:
+  $$\text{Probability} = \min\left(1.0, \max\left(0.0, \frac{\text{slope}}{45.0} \times 0.4 + \frac{\text{elevation}}{3000.0} \times 0.2 + \text{rain\_modifier}\right)\right)$$
+  Where `rain_modifier` accounts for live telemetry or simulated cloudburst deltas (`rainfall_delta / 200.0`).
+
+### 5.2. Explainable AI & Inference (`services/inference.py`)
+* **Inference Pipeline**:
+  `predict_risk(lat, lon)` queries terrain slope, elevation, and 72h cumulative rainfall. Passes features to the XGBoost classifier.
+* **TreeSHAP Attribution**:
+  Extracts SHAP contribution values for features:
+  * `slope`: Slope Gradient
+  * `elevation`: Elevation (DEM)
+  * `rainfall_72h`: 72-Hour Cumulative Rainfall
+  * `soil_moisture`: Soil Saturation Level
+  * `distance_to_road`: Proximity to Road Cut
+* Returns probability, severity tier (*Low*, *Moderate*, *High*, *Critical*), and ordered SHAP driver list.
+
+### 5.3. Safe Evacuation Routing & Road Impact Engine (`main.py`)
+* **Region-Scoped Road Impact (`GET /api/v1/roads-impacted?region_id={id}`)**:
+  Dynamically filters affected road segments based on active `region_id`:
+  * **Region 1**: `NH-13` (Critical, Bhalukpong–Bomdila Stretch) & `SH-4` (High, Tenga Valley Cut)
+  * **Region 2**: `NH-10` (Critical, Gangtok–Nathula Corridor) & `Ranka Road` (Moderate)
+  * **Region 3**: `NH-6` (Critical, Shillong–Cherrapunji Highway) & `Mawkdok Road` (High)
+* **Evacuation Router (`GET /api/v1/routes/safe?region_id={id}`)**:
+  * Defines primary and alternate highway LineString coordinates per region.
+  * Evaluates primary route points against active Critical risk cells.
+  * If an intersection occurs, sets `is_primary_blocked = True`, returns the alternate navigation path, and sets `avoided_segment` (e.g. `"Gangtok Slide Cut (KM 24)"`).
+  * Returns corridor name, distance (km), estimated time (min), and bounding center coordinates for frontend camera auto-centering (`map.flyTo`).
+
+### 5.4. Weather Ingestion Service (`services/ingest.py`)
+* Background service polls Open-Meteo REST API for precipitation and soil moisture telemetry.
+* Aggregates 1h, 24h, and 72h rainfall sums and persists updates into `WeatherObservation`.
+
+### 5.5. Citizen Report & EXIF Verification (`services/exif.py` & `reports.py`)
+* Reads EXIF tags from uploaded photos (`ExifRead`).
+* Compares photo GPS coordinates against submitted user coordinates. Flagged as `is_spoofed = True` if discrepancy exceeds tolerance.
+* Groups verified reports within 300 meters into `IncidentCluster` entities.
+
+---
+
+## 6. Complete API Reference
+
+| Endpoint | Method | Params | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/regions` | `GET` | None | Returns list of supported regions & center coordinates |
+| `/api/v1/risk/grid` | `GET` | `region_id`, `rainfall_delta` | GeoJSON FeatureCollection of 100 corridor cells |
+| `/api/v1/risk` | `GET` | `lat`, `lon` | Risk prediction & SHAP explanation factors |
+| `/api/v1/roads-impacted` | `GET` | `region_id` | Region-specific impacted highway segments |
+| `/api/v1/routes/safe` | `GET` | `region_id` | Evacuation route calculation & avoided segment |
+| `/api/v1/history/replay` | `GET` | None | Timeline scrubber frames for event simulation |
+| `/api/v1/weather/current` | `GET` | `region_id` | Latest 1h/24h/72h rain and soil moisture readings |
+| `/api/v1/alerts` | `GET` | None | List of active authority & public alerts |
+| `/api/v1/reports` | `GET` | None | List of citizen reports & incident clusters |
+| `/api/v1/reports/submit` | `POST` | Multipart Form | Submit user incident report with photo upload |
+| `/api/v1/simulate/rain` | `POST` | `enable: bool` | Toggle cloudburst simulation mode |
+| `/api/v1/token` | `POST` | `username`, `password` | OAuth2 JWT token authentication |
+
+---
+
+## 7. Execution & Operating Instructions
+
+```powershell
+# 1. Navigate to backend workspace
+cd backend
+
+# 2. Activate Python 3.13 virtual environment
+.\venv\Scripts\Activate.ps1
+
+# 3. Install requirements
+pip install -r requirements.txt
+
+# 4. Seed database idempotently (Populates regions, corridor cells, demo alerts)
+python seed.py
+
+# 5. Launch FastAPI development server with auto-reload on port 8001
+python -m uvicorn main:app --reload --port 8001
+```
+
+---
+
+## 8. Architectural Summary
+
+1. **Decoupled Architecture**: High-speed, stateless FastAPI endpoints serving REST JSON and GeoJSON outputs.
+2. **Corridor-Aligned GIS Seeding**: 100 georeferenced cells per region strictly following national highway paths (NH-13, NH-10, NH-6).
+3. **Region-Scoped Operations**: Impacted road detection and evacuation routing dynamically react to selected `region_id`.
+4. **Resilient Data Pipeline**: Satellite and weather API ingest fallback with offline-ready database persistence.
