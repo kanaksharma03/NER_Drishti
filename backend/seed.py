@@ -15,7 +15,7 @@ Re-running seed.py is safe at any time.
 import asyncio
 import random
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -24,27 +24,27 @@ from sqlalchemy import select, func
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from database import engine, AsyncSessionLocal
 from models import (
     Base, TerrainGrid, Region,
     IncidentCluster, CitizenReport, AlertLog,
 )
-from database import db_url
 
 # ---------------------------------------------------------------------------
-# Static region definitions (must match what is in production)
+# Monitored regions (3 fixed corridors)
 # ---------------------------------------------------------------------------
-REGIONS = [
+DEMO_REGIONS = [
     {
         "id": 1,
         "state": "Arunachal Pradesh", "district": "West Kameng",
-        "corridor_name": "NH-13 Bomdila–Bhalukpong",
-        "center_lat": 27.15, "center_lon": 92.40,
+        "corridor_name": "NH-13 Bhalukpong–Bomdila Corridor",
+        "center_lat": 27.18, "center_lon": 92.43,
     },
     {
         "id": 2,
         "state": "Sikkim", "district": "East Sikkim",
-        "corridor_name": "NH-10 Gangtok–Nathula Corridor",
-        "center_lat": 27.33, "center_lon": 88.61,
+        "corridor_name": "NH-10 Gangtok–Rangpo Corridor",
+        "center_lat": 27.36, "center_lon": 88.64,
     },
     {
         "id": 3,
@@ -58,7 +58,7 @@ REGIONS = [
 # Demo alert definitions — one Critical + one High per region (6 total)
 # Identity key: (message_payload, region_id)
 # ---------------------------------------------------------------------------
-_NOW = datetime(2026, 9, 11, 6, 0, 0)
+_NOW = datetime.now(timezone.utc)
 
 DEMO_ALERTS = [
     # --- Arunachal Pradesh (region 1) ---
@@ -208,20 +208,17 @@ DEMO_REPORTS = [
 
 
 async def seed_db():
-    engine = create_async_engine(db_url, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
     # Ensure all tables exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
 
         # ------------------------------------------------------------------
         # 1. Regions (id-based idempotency)
         # ------------------------------------------------------------------
         regions_added = 0
-        for reg_data in REGIONS:
+        for reg_data in DEMO_REGIONS:
             existing = await session.get(Region, reg_data["id"])
             if existing is None:
                 region = Region(
@@ -236,7 +233,7 @@ async def seed_db():
                 regions_added += 1
         if regions_added:
             await session.flush()
-        print(f"Regions: {regions_added} inserted, {len(REGIONS) - regions_added} already present.")
+        print(f"Regions: {regions_added} inserted, {len(DEMO_REGIONS) - regions_added} already present.")
 
         # ------------------------------------------------------------------
         # 2. TerrainGrid — seed / update 100 corridor cells per region
@@ -287,7 +284,7 @@ async def seed_db():
 
         grid_added = 0
         grid_updated = 0
-        for reg_data in REGIONS:
+        for reg_data in DEMO_REGIONS:
             reg_id = reg_data["id"]
             corridor_coords = gen_corridor(CORRIDOR_WAYPOINTS.get(reg_id, CORRIDOR_WAYPOINTS[1]))
             

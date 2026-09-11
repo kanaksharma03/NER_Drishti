@@ -75,24 +75,27 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = create_access_token(data={"sub": form_data.username, "role": role})
     return {"access_token": access_token, "token_type": "bearer", "role": role.capitalize()}
 
+@app.post("/api/v1/reports", tags=["Citizen Reporting"], summary="Submit an incident report")
 @app.post("/api/v1/reports/submit", tags=["Citizen Reporting"], summary="Submit an incident report")
-@limiter.limit("5/minute")
+@limiter.limit("120/minute")
 async def submit_report(
     request: Request,
     type: str = Form(...),
     description: str = Form(...),
     lat: float = Form(...),
     lon: float = Form(...),
-    photo: UploadFile = File(...),
+    photo: UploadFile | str | None = File(None),
     region_id: int | None = Form(None)
 ):
-    upload_dir = "uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, f"{photo.filename}")
-    
-    with open(file_path, "wb") as buffer:
-        import shutil
-        shutil.copyfileobj(photo.file, buffer)
+    file_path = None
+    if isinstance(photo, UploadFile) and photo.filename:
+        upload_dir = "uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, f"{photo.filename}")
+        
+        with open(file_path, "wb") as buffer:
+            import shutil
+            shutil.copyfileobj(photo.file, buffer)
         
     from services.reports import process_report
     async with AsyncSessionLocal() as session:
@@ -273,7 +276,11 @@ async def get_active_reports(region_id: int | None = Query(None)):
                 "lon": r.CitizenReport.lon,
                 "photo_url": r.CitizenReport.photo_path,
                 "status": r.status,
-                "created_at": r.CitizenReport.submitted_at.isoformat() if r.CitizenReport.submitted_at else None
+                "created_at": (
+                    r.CitizenReport.submitted_at.replace(tzinfo=datetime.timezone.utc).isoformat()
+                    if r.CitizenReport.submitted_at and r.CitizenReport.submitted_at.tzinfo is None
+                    else r.CitizenReport.submitted_at.isoformat() if r.CitizenReport.submitted_at else None
+                )
             }
             for r in rows
         ]

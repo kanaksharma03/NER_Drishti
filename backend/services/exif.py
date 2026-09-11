@@ -42,11 +42,9 @@ def extract_gps_from_exif(image_path: str):
         return lat, lon
     return None, None
 
-def check_for_spoofing(image_path: str, submitted_lat: float, submitted_lon: float, max_distance_meters=500.0) -> bool:
-    """
-    Returns True if the image's EXIF GPS data deviates from the submitted coordinates by > max_distance_meters.
-    Returns False if they match within tolerance, or if the image has no EXIF GPS data (we assume innocent until proven guilty for this demo).
-    """
+def check_for_spoofing(image_path: str | None, submitted_lat: float, submitted_lon: float, max_distance_meters=500.0) -> bool:
+    if not image_path or not os.path.exists(image_path):
+        return False
     exif_lat, exif_lon = extract_gps_from_exif(image_path)
     if exif_lat is None or exif_lon is None:
         return False  # No EXIF data to verify against
